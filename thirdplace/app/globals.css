@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+@import "leaflet/dist/leaflet.css";
+
+:root {
+  --orange: #FC4C02;
+  --orange-dark: #D94300;
+  --orange-tint: #FFF1EB;
+  --bg: #F7F6F3;
+  --surface: #FFFFFF;
+  --text: #1F1F1C;
+  --muted: #6E6E68;
+  --divider: #E7E3DD;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Override Leaflet z-indexes so our UI sits on top */
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 400 !important;
+}
+
+.leaflet-pane {
+  z-index: 200 !important;
+}
+
+/* Custom route line pulse animation */
+@keyframes routePulse {
+  0%   { stroke-opacity: 1; }
+  50%  { stroke-opacity: 0.6; }
+  100% { stroke-opacity: 1; }
+}
+
+.route-line-animated {
+  animation: routePulse 2s ease-in-out infinite;
+}
