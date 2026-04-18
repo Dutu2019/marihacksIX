@@ -26,8 +26,13 @@ export default function MapView({
   const pinRef       = useRef<{ origin?: any; dest?: any }>({});
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current) return;
+    
+    let isMounted = true; // Fix: cancel if unmounted before Leaflet loads
+
     import("leaflet").then((L) => {
+      if (!isMounted) return; // Bail if React strict mode double-rendered
+
       delete (L.Icon.Default.prototype as any)._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -50,7 +55,14 @@ export default function MapView({
       map.on("click", (e: any) => onMapClick?.({ lat: e.latlng.lat, lng: e.latlng.lng }));
       mapRef.current = map;
     });
-    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+
+    return () => { 
+      isMounted = false;
+      if (mapRef.current) { 
+        mapRef.current.remove(); 
+        mapRef.current = null; 
+      } 
+    };
   }, []); // eslint-disable-line
 
   useEffect(() => {
