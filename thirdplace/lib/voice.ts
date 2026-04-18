@@ -6,19 +6,27 @@ export interface VoiceCallbacks {
   onAssistantText: (text: string) => void;
   onFunctionCall: (call: { name: string; args: any }) => Promise<any>;
   onError: (msg: string) => void;
-  onStatusChange: (status: "idle" | "listening" | "thinking" | "speaking") => void;
+  onStatusChange: (
+    status: "idle" | "listening" | "thinking" | "speaking",
+  ) => void;
 }
 
-const TOOLS = [{
-  function_declarations: [
-    {
-      name: "reroute",
-      description: "Find a new accessible route because the current path is blocked.",
-      parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] },
-    },
-
-  ],
-}];
+const TOOLS = [
+  {
+    function_declarations: [
+      {
+        name: "reroute",
+        description:
+          "Find a new accessible route because the current path is blocked.",
+        parameters: {
+          type: "object",
+          properties: { reason: { type: "string" } },
+          required: ["reason"],
+        },
+      },
+    ],
+  },
+];
 
 export class VoiceAssistant {
   private ws: WebSocket | null = null;
@@ -39,15 +47,18 @@ export class VoiceAssistant {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.audioContext = new AudioContext({ sampleRate: 24000 });
-      if (this.audioContext.state === "suspended") await this.audioContext.resume();
+      if (this.audioContext.state === "suspended")
+        await this.audioContext.resume();
 
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${this.apiKey}`;
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => this.sendSetup();
-      this.ws.onmessage = async (e) => this.handleMessage(JSON.parse(await e.data.text()));
+      this.ws.onmessage = async (e) =>
+        this.handleMessage(JSON.parse(await e.data.text()));
       this.ws.onclose = () => this.callbacks.onStatusChange("idle");
-      this.ws.onerror = () => this.callbacks.onError("WebSocket Connection Error");
+      this.ws.onerror = () =>
+        this.callbacks.onError("WebSocket Connection Error");
     } catch (err: any) {
       this.callbacks.onError(err.message);
     }
@@ -60,11 +71,15 @@ export class VoiceAssistant {
         generation_config: {
           response_modalities: ["AUDIO", "TEXT"],
           speech_config: {
-            voice_config: { prebuilt_voice_config: { voice_name: this.lang === "fr" ? "Charon" : "Aoede" } }
-          }
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: this.lang === "fr" ? "Charon" : "Aoede",
+              },
+            },
+          },
         },
         tools: TOOLS,
-      }
+      },
     };
     this.ws?.send(JSON.stringify(setup));
     setTimeout(() => this.startRecording(), 500);
@@ -79,22 +94,28 @@ export class VoiceAssistant {
     if (!this.audioContext || !this.stream) return;
     this.callbacks.onStatusChange("listening");
 
-    await this.audioContext.audioWorklet.addModule('/js/pcm-processor.js');
+    await this.audioContext.audioWorklet.addModule("/js/pcm-processor.js");
     const source = this.audioContext.createMediaStreamSource(this.stream);
-    const worklet = new AudioWorkletNode(this.audioContext, 'pcm-processor');
+    const worklet = new AudioWorkletNode(this.audioContext, "pcm-processor");
 
     worklet.port.onmessage = (e) => {
       if (this.ws?.readyState !== WebSocket.OPEN) return;
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(e.data)));
 
-      // CRITICAL 2026 CHANGE: Use camelCase for "realtimeInput" and "mediaChunks"
-      this.ws.send(JSON.stringify({
-        realtimeInput: {
-          mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: base64 }]
-        }
-      }));
+      const bytes = new Uint8Array(e.data);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+
+      this.ws.send(
+        JSON.stringify({
+          realtimeInput: {
+            mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: base64 }],
+          },
+        }),
+      );
     };
-
     source.connect(worklet);
   }
 
@@ -113,15 +134,19 @@ export class VoiceAssistant {
         this.callbacks.onStatusChange("thinking");
         const result = await this.callbacks.onFunctionCall(part.functionCall);
         // CRITICAL 2026 CHANGE: Use camelCase "toolResponse"
-        this.ws?.send(JSON.stringify({
-          toolResponse: {
-            functionResponses: [{
-              id: part.functionCall.id,
-              name: part.functionCall.name,
-              response: { result }
-            }]
-          }
-        }));
+        this.ws?.send(
+          JSON.stringify({
+            toolResponse: {
+              functionResponses: [
+                {
+                  id: part.functionCall.id,
+                  name: part.functionCall.name,
+                  response: { result },
+                },
+              ],
+            },
+          }),
+        );
       }
     }
 
@@ -140,7 +165,9 @@ export class VoiceAssistant {
   private playAudio(base64: string) {
     if (!this.audioContext) return;
     const binary = atob(base64);
-    const bytes = new Int16Array(new Uint8Array(binary.split('').map(c => c.charCodeAt(0))).buffer);
+    const bytes = new Int16Array(
+      new Uint8Array(binary.split("").map((c) => c.charCodeAt(0))).buffer,
+    );
     const float32 = new Float32Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) float32[i] = bytes[i] / 32768;
 
@@ -151,14 +178,17 @@ export class VoiceAssistant {
     source.buffer = buffer;
     source.connect(this.audioContext.destination);
 
-    const startTime = Math.max(this.audioContext.currentTime, this.nextStartTime);
+    const startTime = Math.max(
+      this.audioContext.currentTime,
+      this.nextStartTime,
+    );
     source.start(startTime);
     this.nextStartTime = startTime + buffer.duration;
   }
 
   disconnect() {
     this.ws?.close();
-    this.stream?.getTracks().forEach(t => t.stop());
+    this.stream?.getTracks().forEach((t) => t.stop());
     this.audioContext?.close();
   }
 }
