@@ -67,7 +67,7 @@ export class VoiceAssistant {
   private sendSetup() {
     const setup = {
       setup: {
-        model: "models/gemini-2.0-flash-live-001",
+        model: "models/gemini-3.1-flash-live-preview",
         generation_config: {
           response_modalities: ["AUDIO", "TEXT"],
           speech_config: {
@@ -90,11 +90,16 @@ export class VoiceAssistant {
     return;
   }
 
+  private workletAdded = false;
+
   private async startRecording() {
     if (!this.audioContext || !this.stream) return;
     this.callbacks.onStatusChange("listening");
 
-    await this.audioContext.audioWorklet.addModule("/js/pcm-processor.js");
+    if (!this.workletAdded) {
+      await this.audioContext.audioWorklet.addModule("/js/pcm-processor.js");
+      this.workletAdded = true;
+    }
     const source = this.audioContext.createMediaStreamSource(this.stream);
     const worklet = new AudioWorkletNode(this.audioContext, "pcm-processor");
 

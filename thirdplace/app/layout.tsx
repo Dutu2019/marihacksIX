@@ -18,10 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={geist.variable}>
-      <body>
-        <script src="/js/pcm-processing-module.js" />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
