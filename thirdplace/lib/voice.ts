@@ -146,7 +146,7 @@ export class VoiceAssistant {
       const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
 
       this.ws!.send(JSON.stringify({
-        realtime_input: {
+        realtimeInput: {
           media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: base64 }],
         },
       }));
