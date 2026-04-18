@@ -16,7 +16,7 @@ const TOOLS = [{
       description: "Find a new accessible route because the current path is blocked.",
       parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] },
     },
-    
+
   ],
 }];
 
@@ -56,8 +56,7 @@ export class VoiceAssistant {
   private sendSetup() {
     const setup = {
       setup: {
-        // IMPORTANT: Use the 2026 Production Model
-        model: "models/gemini-3.1-flash-live-preview",
+        model: "models/gemini-2.0-flash-live-001",
         generation_config: {
           response_modalities: ["AUDIO", "TEXT"],
           speech_config: {
