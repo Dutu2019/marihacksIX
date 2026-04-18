@@ -101,6 +101,7 @@ export class VoiceAssistant {
 
   private async handleMessage(data: any) {
     // 1. Handle Audio & Text
+    console.log(data);
     const parts = data.serverContent?.modelTurn?.parts ?? [];
     for (const part of parts) {
       if (part.inlineData) {
