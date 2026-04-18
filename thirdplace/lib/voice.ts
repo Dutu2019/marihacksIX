@@ -71,6 +71,11 @@ export class VoiceAssistant {
     setTimeout(() => this.startRecording(), 500);
   }
 
+  public sendText(text: string) {
+    // placeholder, does nothing
+    return;
+  }
+
   private async startRecording() {
     if (!this.audioContext || !this.stream) return;
     this.callbacks.onStatusChange("listening");
@@ -82,7 +87,7 @@ export class VoiceAssistant {
     worklet.port.onmessage = (e) => {
       if (this.ws?.readyState !== WebSocket.OPEN) return;
       const base64 = btoa(String.fromCharCode(...new Uint8Array(e.data)));
-      
+
       // CRITICAL 2026 CHANGE: Use camelCase for "realtimeInput" and "mediaChunks"
       this.ws.send(JSON.stringify({
         realtimeInput: {
@@ -103,7 +108,7 @@ export class VoiceAssistant {
         this.playAudio(part.inlineData.data);
       }
       if (part.text) this.callbacks.onAssistantText(part.text);
-      
+
       if (part.functionCall) {
         this.callbacks.onStatusChange("thinking");
         const result = await this.callbacks.onFunctionCall(part.functionCall);

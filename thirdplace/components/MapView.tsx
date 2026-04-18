@@ -71,13 +71,9 @@ export default function MapView({
 
   // ── Initialize map once ──────────────────────────────────────────────────
   useEffect(() => {
-<<<<<<< HEAD
-    if (!containerRef.current) return;
-    
-    let isMounted = true; // Fix: cancel if unmounted before Leaflet loads
-=======
     if (!containerRef.current || mapRef.current) return;
->>>>>>> 56ddf91a6da3e005481be967466b45c45704debf
+
+    let isMounted = true; // Fix: cancel if unmounted before Leaflet loads
 
     import("leaflet").then((L) => {
       if (!isMounted) return; // Bail if React strict mode double-rendered
@@ -115,20 +111,12 @@ export default function MapView({
       mapRef.current = map;
     });
 
-<<<<<<< HEAD
-    return () => { 
-      isMounted = false;
-      if (mapRef.current) { 
-        mapRef.current.remove(); 
-        mapRef.current = null; 
-      } 
-=======
     return () => {
+      isMounted = false;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
->>>>>>> 56ddf91a6da3e005481be967466b45c45704debf
     };
   }, []); // eslint-disable-line
 
@@ -240,12 +228,12 @@ export default function MapView({
   useEffect(() => {
     if (!mapRef.current) return;
     import("leaflet").then((L) => {
-      markersRef.current
-        .filter((m) => m._type === "transit")
-        .forEach((m) => m.remove());
-      markersRef.current = markersRef.current.filter(
-        (m) => m._type !== "transit"
-      );
+      // markersRef.current
+      //   .filter((m) => m._type === "transit")
+      //   .forEach((m) => m.remove());
+      // markersRef.current = markersRef.current.filter(
+      //   (m) => m._type !== "transit"
+      // );
 
       transitStops.forEach((stop) => {
         const icon =
@@ -265,7 +253,7 @@ export default function MapView({
             }${stop.lines.length ? "<br>Lines: " + stop.lines.join(", ") : ""}`
           );
         (m as any)._type = "transit";
-        markersRef.current.push(m);
+        // markersRef.current.push(m);
       });
     });
   }, [transitStops]);
@@ -274,12 +262,12 @@ export default function MapView({
   useEffect(() => {
     if (!mapRef.current) return;
     import("leaflet").then((L) => {
-      markersRef.current
-        .filter((m) => m._type === "parking")
-        .forEach((m) => m.remove());
-      markersRef.current = markersRef.current.filter(
-        (m) => m._type !== "parking"
-      );
+      // markersRef.current
+      //   .filter((m) => m._type === "parking")
+      //   .forEach((m) => m.remove());
+      // markersRef.current = markersRef.current.filter(
+      //   (m) => m._type !== "parking"
+      // );
 
       disabledParking.forEach((p) => {
         const m = L.marker([p.lat, p.lng], {
@@ -297,15 +285,11 @@ export default function MapView({
             }${p.free ? " · Free" : ""}`
           );
         (m as any)._type = "parking";
-        markersRef.current.push(m);
+        // markersRef.current.push(m);
       });
     });
   }, [disabledParking]);
 
-<<<<<<< HEAD
-  return <div ref={containerRef} style={{ width: "100%", height: "100%", cursor: "crosshair" }} />;
-}
-=======
   // ── Accessibility overlay ──────────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !overlayGroupRef.current) return;
@@ -438,4 +422,3 @@ export default function MapView({
     />
   );
 }
->>>>>>> 56ddf91a6da3e005481be967466b45c45704debf
