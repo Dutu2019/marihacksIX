@@ -69,7 +69,7 @@ export class VoiceAssistant {
       setup: {
         model: "models/gemini-3.1-flash-live-preview",
         generation_config: {
-          response_modalities: ["AUDIO", "TEXT"],
+          response_modalities: ["AUDIO"], // "TEXT"
           speech_config: {
             voice_config: {
               prebuilt_voice_config: {
