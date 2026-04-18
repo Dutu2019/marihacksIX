@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -27,15 +27,6 @@ const OBSTACLES = [
   { id: 4, type: "crowded", lat: 45.5295, lng: -73.6180, label: "Crowded" },
 ];
 
-const REPORT_TYPES = [
-  { icon: "🚫", label: "Broken elevator", value: "elevator_broken" },
-  { icon: "🪜", label: "Stairs only", value: "stairs_only" },
-  { icon: "🚧", label: "Blocked path", value: "blocked" },
-  { icon: "👥", label: "Too crowded", value: "crowded" },
-  { icon: "❄️", label: "Ice / snow", value: "ice" },
-  { icon: "✍️", label: "Other", value: "other" },
-];
-
 const NAV_STEPS = [
   { text: "Head straight for 50 m toward the main entrance", dist: "50 m" },
   { text: "Turn right toward the elevator lobby", dist: "80 m" },
@@ -45,7 +36,13 @@ const NAV_STEPS = [
   { text: "You have arrived", dist: "0 m" },
 ];
 
-export default function Home() {
+const routes = [
+  { name: "Best accessible", time: "9 min", dist: "620 m", tags: ["No stairs", "1 elevator", "Smooth"], good: true },
+  { name: "Gentler incline", time: "11 min", dist: "710 m", tags: ["Less steep", "Longer", "Quiet"], good: false },
+  { name: "Quiet route", time: "10 min", dist: "690 m", tags: ["Low traffic", "1 narrow"], good: false },
+];
+
+export default function AccessibleMap() {
   const [step, setStep] = useState<"search" | "routes" | "nav">("search");
   const [profile, setProfile] = useState<Profile>("Wheelchair");
   const [query, setQuery] = useState("");
@@ -54,10 +51,9 @@ export default function Home() {
   const [navIndex, setNavIndex] = useState(0);
   const [showReport, setShowReport] = useState(false);
   const [reportType, setReportType] = useState("");
-  const [reportNote, setReportNote] = useState("");
-  const [panelExpanded, setPanelExpanded] = useState(false);
+  const [reportDetails, setReportDetails] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({ voice: true, contrast: false, largeText: false });
+  const [settings, setSettings] = useState({ voice: true, highContrast: false, largeText: false });
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<maplibregl.Map | null>(null);
 
@@ -73,15 +69,6 @@ export default function Home() {
   }, []);
 
   const filtered = query ? LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())) : [];
-  const routes = [
-    { name: "Best accessible", time: "9 min", dist: "620 m", tags: ["No stairs", "1 elevator", "Smooth"], good: true },
-    { name: "Gentler incline", time: "11 min", dist: "710 m", tags: ["Less steep", "Longer", "Quiet"], good: false },
-    { name: "Quiet route", time: "10 min", dist: "690 m", tags: ["Low traffic", "1 narrow"], good: false },
-  ];
-
-  const handleReport = () => {
-    if (reportType) { alert("Report submitted!"); setReportType(""); setReportNote(""); setShowReport(false); }
-  };
 
   const getIcon = (p: Profile) => p === "Wheelchair" ? "♿" : p === "Cane" ? "🦯" : p === "Walker" ? "🚶" : "👥";
 
@@ -130,15 +117,8 @@ export default function Home() {
         .nav-btn.primary { background: #e94560; color: #fff; }
         .nav-btn.secondary { background: #0f3460; color: #fff; }
         .alert-bar { background: rgba(243, 156, 18, 0.15); border: 1px solid rgba(243, 156, 18, 0.3); border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #f39c12; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-        .report-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; display: flex; align-items: flex-end; justify-content: center; }
-        .report-card { background: #16213e; border-radius: 20px 20px 0 0; padding: 20px 16px; width: 100%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
-        .report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
-        .report-tile { background: #0f3460; border-radius: 12px; padding: 16px 8px; cursor: pointer; border: 2px solid transparent; text-align: center; transition: all 0.2s; }
-        .report-tile.selected { border-color: #e94560; }
-        .report-icon { font-size: 22px; margin-bottom: 4px; }
-        .report-label { font-size: 10px; color: #aaa; }
-        .report-input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #0f3460; background: transparent; color: #fff; font-size: 14px; margin-bottom: 12px; outline: none; }
         .settings-overlay { position: fixed; inset: 0; background: #1a1a2e; z-index: 300; padding: 20px 16px; overflow-y: auto; }
+        .settings-panel { max-width: 420px; margin: 0 auto; background: #16213e; border-radius: 16px; padding: 20px; }
         .settings-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
         .settings-subtitle { font-size: 13px; color: #888; margin-bottom: 20px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #0f3460; }
@@ -154,6 +134,7 @@ export default function Home() {
         .dot { width: 8px; height: 8px; border-radius: 50%; }
         .close-btn { background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; padding: 0; }
         .voice-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(233, 69, 96, 0.15); color: #e94560; padding: 4px 10px; border-radius: 20px; font-size: 11px; }
+        .report-input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #0f3460; background: transparent; color: #fff; font-size: 14px; margin-bottom: 12px; outline: none; }
       `}</style>
 
       {/* Top Bar - always visible, floating over map */}
@@ -211,7 +192,6 @@ export default function Home() {
                 ? `Going to ${destination.name}. Optimized for ${profile.toLowerCase()} access.`
                 : "Pick a destination from the search bar above. We'll find the safest path for you."}
             </p>
-
             {destination && (
               <>
                 <div className="alert-bar">
@@ -223,7 +203,6 @@ export default function Home() {
                 </button>
               </>
             )}
-
             {!destination && (
               <>
                 <div className="alert-bar">
@@ -248,7 +227,6 @@ export default function Home() {
             <button className="close-btn" onClick={() => setStep("search")} style={{ float: "right", fontSize: "16px" }}>✕</button>
             <div className="panel-title">Choose your route</div>
             <p className="panel-subtitle">Best options for {profile.toLowerCase()} - sorted by accessibility</p>
-
             {routes.map((r, i) => (
               <button
                 key={r.name}
@@ -266,7 +244,6 @@ export default function Home() {
                 </div>
               </button>
             ))}
-
             <button className="cta-btn" onClick={() => setStep("nav")}>
               Start navigation →
             </button>
@@ -279,14 +256,11 @@ export default function Home() {
             <div style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>
               {destination?.name || "Your destination"}
             </div>
-
             <div className="nav-step">{NAV_STEPS[navIndex].text}</div>
             <span className="nav-dist">{NAV_STEPS[navIndex].dist}</span>
-
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: `${((navIndex + 1) / NAV_STEPS.length) * 100}%` }} />
             </div>
-
             <div className="nav-stats">
               <div className="stat-box">
                 <span className="stat-label">ETA</span>
@@ -307,13 +281,11 @@ export default function Home() {
                 </span>
               </div>
             </div>
-
             {navIndex === 2 && (
               <div className="alert-bar">
                 <span>⚠️ Crowded hall reported ahead</span>
               </div>
             )}
-
             <div className="nav-actions">
               <button
                 className="nav-btn secondary"
@@ -325,7 +297,6 @@ export default function Home() {
                 onClick={() => setNavIndex((n) => Math.min(n + 1, NAV_STEPS.length - 1))}
               >{navIndex >= NAV_STEPS.length - 1 ? "Arrived!" : "Next →"}</button>
             </div>
-
             <button
               className="nav-btn secondary"
               style={{ marginTop: "12px", background: "transparent", border: "1px solid #0f3460" }}
@@ -333,7 +304,6 @@ export default function Home() {
             >
               🚨 Report obstacle on this route
             </button>
-
             <button
               className="nav-btn secondary"
               style={{ marginTop: "8px", background: "transparent", border: "1px solid #0f3460" }}
@@ -345,126 +315,121 @@ export default function Home() {
         )}
       </div>
 
-      
-        {/* Settings Overlay */}
-        {settingsOpen && (
-          <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-            <div className="settings-panel" onClick={e => e.stopPropagation()}>
-              <h2 className="settings-title">Settings</h2>
-              <p className="settings-subtitle">Accessibility preferences</p>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">Voice guidance</div>
-                  <div className="setting-desc">Turn-by-turn audio directions</div>
-                </div>
-                <button
-                  className={`toggle ${settings.voice ? 'on' : ''}`}
-                  onClick={() => setSettings(s => ({ ...s, voice: !s.voice }))}
-                >
-                  <span className="toggle-knob"></span>
-                </button>
+      {/* Settings Overlay */}
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-panel" onClick={e => e.stopPropagation()}>
+            <h2 className="settings-title">Settings</h2>
+            <p className="settings-subtitle">Accessibility preferences</p>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">Voice guidance</div>
+                <div className="setting-desc">Turn-by-turn audio directions</div>
               </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">Large text</div>
-                  <div className="setting-desc">Bigger fonts for easier reading</div>
-                </div>
-                <button
-                  className={`toggle ${settings.largeText ? 'on' : ''}`}
-                  onClick={() => setSettings(s => ({ ...s, largeText: !s.largeText }))}
-                >
-                  <span className="toggle-knob"></span>
-                </button>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">High contrast</div>
-                  <div className="setting-desc">Better visibility in bright light</div>
-                </div>
-                <button
-                  className={`toggle ${settings.highContrast ? 'on' : ''}`}
-                  onClick={() => setSettings(s => ({ ...s, highContrast: !s.highContrast }))}
-                >
-                  <span className="toggle-knob"></span>
-                </button>
-              </div>
-              <div className="legend">
-                <div className="legend-title">Path difficulty</div>
-                <div className="legend-items">
-                  <div className="legend-item">
-                    <span className="dot" style={{ background: '#2ecc71' }}></span>
-                    Easy
-                  </div>
-                  <div className="legend-item">
-                    <span className="dot" style={{ background: '#f39c12' }}></span>
-                    Moderate
-                  </div>
-                  <div className="legend-item">
-                    <span className="dot" style={{ background: '#e74c3c' }}></span>
-                    Hard
-                  </div>
-                </div>
-              </div>
-              <button className="close-btn" onClick={() => setSettingsOpen(false)}>Close</button>
-            </div>
-          </div>
-        )}
-
-        {/* Report Obstacle Overlay */}
-        {showReport && (
-          <div className="settings-overlay" onClick={() => setShowReport(false)}>
-            <div className="settings-panel" onClick={e => e.stopPropagation()}>
-              <h2 className="settings-title">Report Obstacle</h2>
-              <p className="settings-subtitle">Help others on their way</p>
-              <div className="setting-row">
-                <label className="setting-label">Type of obstacle</label>
-              </div>
-              <select
-                className="report-input"
-                value={reportType}
-                onChange={e => setReportType(e.target.value)}
+              <button
+                className={`toggle ${settings.voice ? 'on' : ''}`}
+                onClick={() => setSettings(s => ({ ...s, voice: !s.voice }))}
               >
-                <option value="stairs">Stairs / No elevator</option>
-                <option value="construction">Construction</option>
-                <option value="crowded">Very crowded</option>
-                <option value="blocked">Path blocked</option>
-                <option value="other">Other</option>
-              </select>
-              <div className="setting-row" style={{ marginTop: 12 }}>
-                <label className="setting-label">Details (optional)</label>
+                <span className="toggle-knob"></span>
+              </button>
+            </div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">Large text</div>
+                <div className="setting-desc">Bigger fonts for easier reading</div>
               </div>
-              <textarea
-                className="report-input"
-                rows={3}
-                value={reportDetails}
-                onChange={e => setReportDetails(e.target.value)}
-                placeholder="Describe the obstacle..."
-              />
-              <div className="nav-actions">
-                <button
-                  className="nav-btn secondary"
-                  onClick={() => setShowReport(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="nav-btn primary"
-                  onClick={() => {
-                    // In a real app, this would send to a backend
-                    setShowReport(false);
-                    setReportType('stairs');
-                    setReportDetails('');
-                  }}
-                >
-                  Submit Report
-                </button>
+              <button
+                className={`toggle ${settings.largeText ? 'on' : ''}`}
+                onClick={() => setSettings(s => ({ ...s, largeText: !s.largeText }))}
+              >
+                <span className="toggle-knob"></span>
+              </button>
+            </div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">High contrast</div>
+                <div className="setting-desc">Better visibility in bright light</div>
+              </div>
+              <button
+                className={`toggle ${settings.highContrast ? 'on' : ''}`}
+                onClick={() => setSettings(s => ({ ...s, highContrast: !s.highContrast }))}
+              >
+                <span className="toggle-knob"></span>
+              </button>
+            </div>
+            <div className="legend">
+              <div className="legend-title">Path difficulty</div>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <span className="dot" style={{ background: '#2ecc71' }}></span>
+                  Easy
+                </div>
+                <div className="legend-item">
+                  <span className="dot" style={{ background: '#f39c12' }}></span>
+                  Moderate
+                </div>
+                <div className="legend-item">
+                  <span className="dot" style={{ background: '#e74c3c' }}></span>
+                  Hard
+                </div>
               </div>
             </div>
+            <button className="close-btn" onClick={() => setSettingsOpen(false)}>Close</button>
           </div>
-        )}
-      </>
-    );
-  }, [profile, step, navIndex, showReport]);
-}
+        </div>
+      )}
 
-export default AccessibleMap;
+      {/* Report Obstacle Overlay */}
+      {showReport && (
+        <div className="settings-overlay" onClick={() => setShowReport(false)}>
+          <div className="settings-panel" onClick={e => e.stopPropagation()}>
+            <h2 className="settings-title">Report Obstacle</h2>
+            <p className="settings-subtitle">Help others on their way</p>
+            <div className="setting-row">
+              <label className="setting-label">Type of obstacle</label>
+            </div>
+            <select
+              className="report-input"
+              value={reportType}
+              onChange={e => setReportType(e.target.value)}
+            >
+              <option value="stairs">Stairs / No elevator</option>
+              <option value="construction">Construction</option>
+              <option value="crowded">Very crowded</option>
+              <option value="blocked">Path blocked</option>
+              <option value="other">Other</option>
+            </select>
+            <div className="setting-row" style={{ marginTop: 12 }}>
+              <label className="setting-label">Details (optional)</label>
+            </div>
+            <textarea
+              className="report-input"
+              rows={3}
+              value={reportDetails}
+              onChange={e => setReportDetails(e.target.value)}
+              placeholder="Describe the obstacle..."
+            />
+            <div className="nav-actions">
+              <button
+                className="nav-btn secondary"
+                onClick={() => setShowReport(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="nav-btn primary"
+                onClick={() => {
+                  setShowReport(false);
+                  setReportType('stairs');
+                  setReportDetails('');
+                }}
+              >
+                Submit Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
