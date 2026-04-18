@@ -1,8 +1,4 @@
 // lib/voice.ts
-// Gemini 2.0 Flash Live Preview — voice assistant with function calling.
-// Handles English and French. Supports rerouting, obstacle reporting,
-// transit queries, and parking queries via function calls.
-
 export type VoiceLang = "en" | "fr";
 
 export interface VoiceFunctionCall {
@@ -18,24 +14,21 @@ export interface VoiceCallbacks {
   onStatusChange: (status: "idle" | "listening" | "thinking" | "speaking") => void;
 }
 
-// Tool definitions sent to Gemini
 const TOOLS = [
   {
     function_declarations: [
       {
         name: "reroute",
-        description: "Find a new accessible route because the current path is blocked or inaccessible. Call this when the user says the path is blocked, inaccessible, or asks for another way.",
+        description: "Find a new accessible route because the current path is blocked.",
         parameters: {
           type: "object",
-          properties: {
-            reason: { type: "string", description: "Why the user needs a new route (e.g. 'stairs', 'construction', 'too crowded')" },
-          },
+          properties: { reason: { type: "string" } },
           required: ["reason"],
         },
       },
       {
         name: "report_obstacle",
-        description: "Report an accessibility obstacle at the current location.",
+        description: "Report an accessibility obstacle.",
         parameters: {
           type: "object",
           properties: {
@@ -45,60 +38,28 @@ const TOOLS = [
           required: ["type"],
         },
       },
-      {
-        name: "get_next_step",
-        description: "Get the next navigation instruction.",
-        parameters: { type: "object", properties: {} },
-      },
-      {
-        name: "get_eta",
-        description: "Get the estimated time of arrival.",
-        parameters: { type: "object", properties: {} },
-      },
-      {
-        name: "find_transit",
-        description: "Find the nearest accessible bus or metro stop.",
-        parameters: {
-          type: "object",
-          properties: {
-            type: { type: "string", enum: ["bus", "metro", "any"], description: "Type of transit" },
-          },
-        },
-      },
-      {
-        name: "find_parking",
-        description: "Find the nearest accessible disabled parking spots.",
-        parameters: { type: "object", properties: {} },
-      },
+      { name: "get_next_step", description: "Get navigation instruction.", parameters: { type: "object", properties: {} } },
+      { name: "find_transit", description: "Find nearest accessible stop.", parameters: { type: "object", properties: { type: { type: "string" } } } },
+      { name: "find_parking", description: "Find accessible parking.", parameters: { type: "object", properties: {} } },
     ],
   },
 ];
 
 const SYSTEM_PROMPT_EN = `You are way·go, a friendly accessible navigation assistant. 
-You help users with mobility challenges navigate safely. 
-Speak naturally and concisely. You understand English and French — respond in the same language the user speaks.
-When the user says a path is blocked or inaccessible, call the reroute function immediately.
-When asked about transit, call find_transit. For parking, call find_parking.
-Keep responses under 2 sentences when navigating. Be encouraging and calm.`;
+Speak naturally and concisely. Responses under 2 sentences. Use tools for navigation/transit.`;
 
-const SYSTEM_PROMPT_FR = `Tu es way·go, un assistant de navigation accessible et sympathique.
-Tu aides les utilisateurs avec des défis de mobilité à naviguer en toute sécurité.
-Parle naturellement et brièvement. Tu comprends le français et l'anglais — réponds dans la langue de l'utilisateur.
-Si le chemin est bloqué ou inaccessible, appelle immédiatement la fonction reroute.
-Pour les transports, appelle find_transit. Pour le stationnement, appelle find_parking.
-Garde les réponses courtes lors de la navigation. Sois encourageant et calme.`;
+const SYSTEM_PROMPT_FR = `Tu es way·go, un assistant de navigation accessible.
+Parle naturellement et brièvement. Moins de 2 phrases. Utilise les outils pour la navigation.`;
 
 export class VoiceAssistant {
   private ws: WebSocket | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
   private audioContext: AudioContext | null = null;
   private stream: MediaStream | null = null;
   private callbacks: VoiceCallbacks;
   private lang: VoiceLang;
   private apiKey: string;
   private isConnected = false;
-  private audioQueue: ArrayBuffer[] = [];
-  private isPlayingAudio = false;
+  private nextStartTime = 0; // For gapless audio scheduling
 
   constructor(apiKey: string, lang: VoiceLang, callbacks: VoiceCallbacks) {
     this.apiKey = apiKey;
@@ -108,31 +69,39 @@ export class VoiceAssistant {
 
   async connect(): Promise<void> {
     if (!this.apiKey) {
-      this.callbacks.onError("No Gemini API key provided. Add NEXT_PUBLIC_GEMINI_API_KEY to your .env.local");
+      this.callbacks.onError("No API key provided.");
       return;
     }
 
     try {
-      // Request microphone
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.audioContext = new AudioContext({ sampleRate: 16000 });
+      // Gemini Live prefers 24kHz for output, we use 16kHz for input
+      this.audioContext = new AudioContext({ sampleRate: 24000 });
+      
+      if (this.audioContext.state === "suspended") {
+        await this.audioContext.resume();
+      }
 
-      // Connect to Gemini Live WebSocket
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.apiKey}`;
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${this.apiKey}`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         this.isConnected = true;
-        // Send setup message
         this.sendSetup();
       };
 
-      this.ws.onmessage = (event) => this.handleMessage(event);
-      this.ws.onerror   = () => this.callbacks.onError("WebSocket connection failed");
-      this.ws.onclose   = () => { this.isConnected = false; this.callbacks.onStatusChange("idle"); };
+      this.ws.onmessage = async (event) => {
+        const data = JSON.parse(await event.data.text());
+        this.handleMessage(data);
+      };
 
+      this.ws.onerror = () => this.callbacks.onError("WebSocket connection failed");
+      this.ws.onclose = () => {
+        this.isConnected = false;
+        this.callbacks.onStatusChange("idle");
+      };
     } catch (err: any) {
-      this.callbacks.onError(err.message ?? "Microphone access denied");
+      this.callbacks.onError(err.message ?? "Mic access denied");
     }
   }
 
@@ -158,28 +127,24 @@ export class VoiceAssistant {
       },
     };
     this.ws.send(JSON.stringify(setup));
-
-    // Start recording after setup
     setTimeout(() => this.startRecording(), 500);
   }
 
-  private startRecording() {
-    if (!this.stream || !this.ws) return;
+  private async startRecording() {
+    if (!this.stream || !this.ws || !this.audioContext) return;
     this.callbacks.onStatusChange("listening");
 
-    // Use ScriptProcessor to capture raw PCM at 16kHz
-    const source = this.audioContext!.createMediaStreamSource(this.stream);
-    const processor = this.audioContext!.createScriptProcessor(4096, 1, 1);
+    // Ensure pcm-processing-module.js is in your /public/js/ folder
+    await this.audioContext.audioWorklet.addModule('/js/pcm-processing-module.js');
 
-    processor.onaudioprocess = (e) => {
-      if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      const float32 = e.inputBuffer.getChannelData(0);
-      // Convert to 16-bit PCM
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
-      }
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(int16.buffer)));
+    const source = this.audioContext.createMediaStreamSource(this.stream);
+    const pcmWorkerNode = new AudioWorkletNode(this.audioContext, 'pcm-processor');
+
+    pcmWorkerNode.port.onmessage = (event) => {
+      if (!this.isConnected || this.ws?.readyState !== WebSocket.OPEN) return;
+      const buffer = event.data;
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
       this.ws!.send(JSON.stringify({
         realtime_input: {
           media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: base64 }],
@@ -187,92 +152,85 @@ export class VoiceAssistant {
       }));
     };
 
-    source.connect(processor);
-    processor.connect(this.audioContext!.destination);
+    source.connect(pcmWorkerNode);
+    // Do NOT connect to destination (prevents feedback)
   }
 
-  private async handleMessage(event: MessageEvent) {
-    try {
-      const data = typeof event.data === "string"
-        ? JSON.parse(event.data)
-        : JSON.parse(await event.data.text());
+  private async handleMessage(data: any) {
+    const serverContent = data?.serverContent?.modelTurn?.parts ?? [];
 
-      // Server content (audio + text + function calls)
-      const serverContent = data?.serverContent?.modelTurn?.parts ?? [];
-
-      for (const part of serverContent) {
-        // Audio response — play it
-        if (part.inlineData?.mimeType?.startsWith("audio/")) {
-          this.callbacks.onStatusChange("speaking");
-          const audioData = atob(part.inlineData.data);
-          const bytes = new Uint8Array(audioData.length);
-          for (let i = 0; i < audioData.length; i++) bytes[i] = audioData.charCodeAt(i);
-          this.audioQueue.push(bytes.buffer);
-          this.playNextAudio();
-        }
-
-        // Text response
-        if (part.text) {
-          this.callbacks.onAssistantText(part.text);
-        }
-
-        // Function call
-        if (part.functionCall) {
-          this.callbacks.onStatusChange("thinking");
-          const result = await this.callbacks.onFunctionCall({
-            name: part.functionCall.name,
-            args: part.functionCall.args ?? {},
-          });
-          // Send function result back
-          this.ws?.send(JSON.stringify({
-            tool_response: {
-              function_responses: [{
-                id: part.functionCall.id,
-                name: part.functionCall.name,
-                response: { result: JSON.stringify(result) },
-              }],
-            },
-          }));
-        }
+    for (const part of serverContent) {
+      // HANDLE AUDIO
+      if (part.inlineData?.data) {
+        this.callbacks.onStatusChange("speaking");
+        this.playPCM(part.inlineData.data);
       }
 
-      // Transcription
-      const transcript = data?.serverContent?.inputTranscription;
-      if (transcript?.text) {
-        this.callbacks.onTranscript(transcript.text, transcript.isFinal ?? false);
+      // HANDLE TEXT
+      if (part.text) {
+        this.callbacks.onAssistantText(part.text);
       }
 
-      // Turn complete
-      if (data?.serverContent?.turnComplete) {
-        this.callbacks.onStatusChange("listening");
+      // HANDLE FUNCTION CALLS
+      if (part.functionCall) {
+        this.callbacks.onStatusChange("thinking");
+        const result = await this.callbacks.onFunctionCall({
+          name: part.functionCall.name,
+          args: part.functionCall.args ?? {},
+        });
+        
+        this.ws?.send(JSON.stringify({
+          tool_response: {
+            function_responses: [{
+              id: part.functionCall.id,
+              name: part.functionCall.name,
+              response: { result },
+            }],
+          },
+        }));
       }
-    } catch {
-      // Ignore parse errors for binary frames
+    }
+
+    if (data?.serverContent?.inputTranscription) {
+      const trans = data.serverContent.inputTranscription;
+      this.callbacks.onTranscript(trans.text, trans.isFinal ?? false);
+    }
+
+    if (data?.serverContent?.turnComplete) {
+      this.callbacks.onStatusChange("listening");
+    }
+
+    if (data?.serverContent?.interrupted) {
+      this.nextStartTime = 0; // Reset scheduling on interrupt
     }
   }
 
-  private async playNextAudio() {
-    if (this.isPlayingAudio || !this.audioQueue.length || !this.audioContext) return;
-    this.isPlayingAudio = true;
+  private playPCM(base64Data: string) {
+    if (!this.audioContext) return;
 
-    const buffer = this.audioQueue.shift()!;
-    try {
-      const decoded = await this.audioContext.decodeAudioData(buffer.slice(0));
-      const source = this.audioContext.createBufferSource();
-      source.buffer = decoded;
-      source.connect(this.audioContext.destination);
-      source.onended = () => {
-        this.isPlayingAudio = false;
-        this.playNextAudio();
-      };
-      source.start();
-    } catch {
-      this.isPlayingAudio = false;
-      this.playNextAudio();
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    
+    // Gemini outputs 16-bit PCM, Little Endian, 24kHz
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768.0;
     }
+
+    const buffer = this.audioContext.createBuffer(1, float32.length, 24000);
+    buffer.getChannelData(0).set(float32);
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.audioContext.destination);
+
+    const startTime = Math.max(this.audioContext.currentTime, this.nextStartTime);
+    source.start(startTime);
+    this.nextStartTime = startTime + buffer.duration;
   }
 
-  // Send a text message to Gemini (for programmatic messages)
   sendText(text: string) {
     if (!this.ws || !this.isConnected) return;
     this.ws.send(JSON.stringify({
@@ -281,7 +239,6 @@ export class VoiceAssistant {
         turn_complete: true,
       },
     }));
-    this.callbacks.onStatusChange("thinking");
   }
 
   disconnect() {
