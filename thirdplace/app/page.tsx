@@ -50,7 +50,6 @@ const PROFILE_ICONS: Record<Profile, string> = {
 };
 const DEFAULT_CENTER: LatLng = { lat: 45.5017, lng: -73.5673 }; // Montreal
 
-// ── i18n helper ────────────────────────────────────────────────────────────────
 type Lang = "en" | "fr";
 const T: Record<string, Record<Lang, string>> = {
   searchFrom: {
@@ -74,22 +73,10 @@ const T: Record<string, Record<Lang, string>> = {
   logout: { en: "Log out", fr: "Déconnexion" },
   username: { en: "Username", fr: "Nom d'utilisateur" },
   password: { en: "Password", fr: "Mot de passe" },
-  tapMap: {
-    en: "Search an address or tap the map to set a destination",
-    fr: "Cherchez une adresse ou appuyez sur la carte",
-  },
-  sortedBy: {
-    en: "Sorted by accessibility score",
-    fr: "Triés par score d'accessibilité",
-  },
-  transitStops: {
-    en: "Accessible transit stops nearby",
-    fr: "Arrêts accessibles à proximité",
-  },
-  parkingSpots: {
-    en: "Disabled parking nearby",
-    fr: "Stationnement handicapé à proximité",
-  },
+  tapMap: { en: "Search an address or tap the map to set a destination", fr: "Cherchez une adresse ou appuyez sur la carte" },
+  sortedBy: { en: "Sorted by accessibility score", fr: "Triés par score d'accessibilité" },
+  transitStops: { en: "Accessible transit stops nearby", fr: "Arrêts accessibles à proximité" },
+  parkingSpots: { en: "Disabled parking nearby", fr: "Stationnement handicapé à proximité" },
   voiceOn: { en: "Voice on", fr: "Voix activée" },
   voiceOff: { en: "Voice off", fr: "Voix désactivée" },
   listening: { en: "Listening…", fr: "J'écoute…" },
@@ -100,14 +87,11 @@ const T: Record<string, Record<Lang, string>> = {
   min: { en: "min", fr: "min" },
   accessibility: { en: "accessibility", fr: "accessibilité" },
   best: { en: "Best", fr: "Meilleur" },
-  findingRoutes: {
-    en: "Finding the most accessible routes…",
-    fr: "Recherche des itinéraires accessibles…",
-  },
   geminiKey: {
     en: "Gemini API key (for voice)",
     fr: "Clé API Gemini (pour la voix)",
   },
+  findingRoutes: { en: "Finding the most accessible routes…", fr: "Recherche des itinéraires accessibles…" },
 };
 const t = (key: string, lang: Lang) => T[key]?.[lang] ?? key;
 
@@ -119,8 +103,6 @@ export default function App() {
   const [authPass, setAuthPass] = useState("");
   const [authError, setAuthError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
-
-  // ── Preferences (from user or defaults) ───────────────────────────────────
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFS);
 
   const lang = prefs.language as Lang;
@@ -132,9 +114,7 @@ export default function App() {
   const [originQuery, setOriginQuery] = useState("");
   const [suggestions, setSuggestions] = useState<GeoResult[]>([]);
   const [originSuggestions, setOriginSuggestions] = useState<GeoResult[]>([]);
-  const [activeSearch, setActiveSearch] = useState<"origin" | "dest" | null>(
-    null
-  );
+  const [activeSearch, setActiveSearch] = useState<"origin" | "dest" | null>(null);
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [originName, setOriginName] = useState("");
   const [destination, setDestination] = useState<LatLng | null>(null);
@@ -144,7 +124,7 @@ export default function App() {
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [currentLocation, _setCurrLocation] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
-  const [agentLog, setAgentLog] = useState<LogEntry[]>([]);
+  const [agentLog, setAgentLog] = useState<{ type: string; message: string }[]>([]);
   const [showLog, setShowLog] = useState(false);
   const [panel, setPanel] = useState<"search" | "routes" | "nav">("search");
   const [navStep, setNavStep] = useState(0);
@@ -153,12 +133,10 @@ export default function App() {
   const [parking, setParking] = useState<DisabledParking[]>([]);
 
   // ── Voice state ───────────────────────────────────────────────────────────
-  const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState<
-    "idle" | "listening" | "thinking" | "speaking"
-  >("idle");
   const [transcript, setTranscript] = useState("");
   const [assistantText, setAssistantText] = useState("");
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
   const [geminiKey, setGeminiKey] = useState("");
   const voiceRef = useRef<VoiceAssistant | null>(null);
 
@@ -186,10 +164,7 @@ export default function App() {
   // ── Auth handlers ─────────────────────────────────────────────────────────
   const handleLogin = () => {
     const res = login(authUser, authPass);
-    if (!res.ok) {
-      setAuthError(res.error ?? "Error");
-      return;
-    }
+    if (!res.ok) { setAuthError(res.error ?? "Error"); return; }
     const u = getCurrentUser()!;
     setUser(u);
     setPrefs(u.preferences);
@@ -199,29 +174,22 @@ export default function App() {
 
   const handleRegister = () => {
     const res = register(authUser, authPass);
-    if (!res.ok) {
-      setAuthError(res.error ?? "Error");
-      return;
-    }
-    handleLogin();
+    if (!res.ok) { setAuthError(res.error ?? "Error"); return; }
+    const u = getCurrentUser()!;
+    setUser(u);
+    setPrefs(u.preferences);
+    setAuthPanel(null);
+    setAuthError("");
   };
 
-  const handleLogout = () => {
-    logout();
-    setUser(null);
-    setPrefs(DEFAULT_PREFS);
-  };
+  const handleLogout = () => { logout(); setUser(null); setPrefs(DEFAULT_PREFS); };
 
-  const updatePref = <K extends keyof UserPreferences>(
-    key: K,
-    val: UserPreferences[K]
-  ) => {
+  const updatePref = <K extends keyof UserPreferences>(key: K, val: UserPreferences[K]) => {
     const next = { ...prefs, [key]: val };
     setPrefs(next);
     if (user) savePreferences(next);
   };
 
-  // ── Geocoding ─────────────────────────────────────────────────────────────
   const handleSearch = useCallback((val: string, type: "origin" | "dest") => {
     if (type === "dest") setQuery(val);
     else setOriginQuery(val);
@@ -233,18 +201,6 @@ export default function App() {
       else setOriginSuggestions(results);
     }, 380);
   }, []);
-
-  const getUserLocation = () => {
-    navigator.geolocation.getCurrentPosition((position) => {
-      setCurrentLocation(position.coords.latitude, position.coords.longitude);
-      pickOrigin({
-        name: "You",
-        fullName: "Current Location",
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      } satisfies GeoResult);
-    });
-  };
 
   const pickOrigin = (loc: GeoResult) => {
     setOrigin({ lat: loc.lat, lng: loc.lng });
@@ -272,7 +228,15 @@ export default function App() {
     setSuggestions([]);
   }, []);
 
-  // ── Find routes ───────────────────────────────────────────────────────────
+  const getUserLocation = () => {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setOrigin(loc);
+      setOriginQuery("Current Location");
+      setMapCenter(loc);
+    });
+  };
+
   const findRoutes = async () => {
     if (!destination) return;
     const from = origin ?? DEFAULT_CENTER;
@@ -303,7 +267,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // ── Voice ─────────────────────────────────────────────────────────────────
   const toggleVoice = async () => {
     if (voiceActive) {
       voiceRef.current?.disconnect();
@@ -313,13 +276,10 @@ export default function App() {
     }
     const key = geminiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
     const va = new VoiceAssistant(key, lang as VoiceLang, {
-      onTranscript: (text, final) => setTranscript(final ? "" : text),
-      onAssistantText: (text) => setAssistantText(text),
+      onTranscript: () => {},
+      onAssistantText: () => {},
       onStatusChange: setVoiceStatus,
-      onError: (msg) => {
-        alert(msg);
-        setVoiceActive(false);
-      },
+      onError: (msg) => { alert(msg); setVoiceActive(false); },
       onFunctionCall: async ({ name, args }) => {
         if (name === "reroute") {
           if (destination) await findRoutes();
@@ -332,38 +292,22 @@ export default function App() {
         if (name === "get_eta") {
           const r = routes[selectedRoute];
           const remaining = r
-            ? r.timeMin -
-              Math.round((navStep * r.timeMin) / Math.max(r.steps.length, 1))
+            ? r.timeMin - Math.round((navStep * r.timeMin) / Math.max(r.steps.length, 1))
             : 0;
           return { etaMinutes: remaining };
         }
         if (name === "find_transit") {
-          const stops = destination
-            ? await fetchNearbyTransitStops(destination)
-            : [];
+          const stops = destination ? await fetchNearbyTransitStops(destination) : [];
           setTransitStops(stops);
-          return {
-            stops: stops
-              .slice(0, 3)
-              .map((s) => ({ name: s.name, type: s.type, lines: s.lines })),
-          };
+          return { stops: stops.slice(0, 3).map((s) => ({ name: s.name, type: s.type, lines: s.lines })) };
         }
         if (name === "find_parking") {
-          const spots = destination
-            ? await fetchDisabledParking(destination)
-            : [];
+          const spots = destination ? await fetchDisabledParking(destination) : [];
           setParking(spots);
-          return {
-            spots: spots
-              .slice(0, 3)
-              .map((p) => ({ name: p.name, spots: p.spots, free: p.free })),
-          };
+          return { spots: spots.slice(0, 3).map((p) => ({ name: p.name, spots: p.spots, free: p.free })) };
         }
         if (name === "report_obstacle") {
-          return {
-            success: true,
-            message: "Obstacle reported, finding alternative route",
-          };
+          return { success: true, message: "Obstacle reported, finding alternative route" };
         }
         return {};
       },
@@ -375,15 +319,9 @@ export default function App() {
 
   // Announce nav steps via voice
   useEffect(() => {
-    if (
-      voiceActive &&
-      panel === "nav" &&
-      routes[selectedRoute]?.steps?.[navStep]
-    ) {
+    if (voiceActive && panel === "nav" && routes[selectedRoute]?.steps?.[navStep]) {
       const step = routes[selectedRoute].steps[navStep];
-      voiceRef.current?.sendText(
-        `Next navigation instruction: ${step.instruction}`
-      );
+      voiceRef.current?.sendText(`Next navigation instruction: ${step.instruction}`);
     }
   }, [navStep, panel]); // eslint-disable-line
 
@@ -391,112 +329,29 @@ export default function App() {
   const currentRoute = routes[selectedRoute];
   const steps = currentRoute?.steps ?? [];
   const totalSteps = steps.length;
-  const progressPct =
-    totalSteps > 0 ? Math.round((navStep / totalSteps) * 100) : 0;
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-  const voiceColor: Record<string, string> = {
-    idle: "#6E6E68",
-    listening: "#FC4C02",
-    thinking: "#2563EB",
-    speaking: "#059669",
-  };
+  const progressPct = totalSteps > 0 ? Math.round((navStep / totalSteps) * 100) : 0;
 
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div
-      style={{
-        height: "100dvh",
-        width: "100vw",
-        position: "relative",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <div style={{ height: "100dvh", width: "100vw", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+
       {/* ── AUTH MODAL ──────────────────────────────────────────────────── */}
       {authPanel && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            zIndex: 2000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: 20,
-              padding: 24,
-              width: "100%",
-              maxWidth: 360,
-              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 18,
-              }}
-            >
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "white", borderRadius: 20, padding: 24, width: "100%", maxWidth: 360, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 18 }}>
               <div style={{ fontSize: 17, fontWeight: 700 }}>
                 {authPanel === "login" ? t("login", lang) : t("register", lang)}
               </div>
-              <button
-                onClick={() => {
-                  setAuthPanel(null);
-                  setAuthError("");
-                }}
-                style={iconBtnStyle}
-              >
-                ✕
-              </button>
+              <button onClick={() => { setAuthPanel(null); setAuthError(""); }} style={iconBtnStyle}>✕</button>
             </div>
-            <input
-              value={authUser}
-              onChange={(e) => setAuthUser(e.target.value)}
-              placeholder={t("username", lang)}
-              style={inputFieldStyle}
-            />
-            <input
-              value={authPass}
-              onChange={(e) => setAuthPass(e.target.value)}
-              placeholder={t("password", lang)}
-              type="password"
-              style={{ ...inputFieldStyle, marginTop: 8 }}
-            />
-            {authError && (
-              <div style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
-                {authError}
-              </div>
-            )}
-            <button
-              onClick={authPanel === "login" ? handleLogin : handleRegister}
-              style={{ ...primaryBtnStyle, marginTop: 14 }}
-            >
+            <input value={authUser} onChange={(e) => setAuthUser(e.target.value)} placeholder={t("username", lang)} style={inputFieldStyle} />
+            <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder={t("password", lang)} type="password" style={{ ...inputFieldStyle, marginTop: 8 }} />
+            {authError && <div style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>{authError}</div>}
+            <button onClick={authPanel === "login" ? handleLogin : handleRegister} style={{ ...primaryBtnStyle, marginTop: 14 }}>
               {authPanel === "login" ? t("login", lang) : t("register", lang)}
             </button>
-            <button
-              onClick={() =>
-                setAuthPanel(authPanel === "login" ? "register" : "login")
-              }
-              style={{
-                background: "none",
-                border: "none",
-                color: "#FC4C02",
-                fontSize: 13,
-                cursor: "pointer",
-                marginTop: 10,
-                display: "block",
-                fontFamily: "inherit",
-              }}
-            >
+            <button onClick={() => setAuthPanel(authPanel === "login" ? "register" : "login")} style={{ background: "none", border: "none", color: "#FC4C02", fontSize: 13, cursor: "pointer", marginTop: 10, display: "block", fontFamily: "inherit" }}>
               {authPanel === "login" ? t("register", lang) : t("login", lang)}
             </button>
           </div>
@@ -505,155 +360,49 @@ export default function App() {
 
       {/* ── SETTINGS MODAL ──────────────────────────────────────────────── */}
       {showSettings && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            zIndex: 2000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: 20,
-              padding: 24,
-              width: "100%",
-              maxWidth: 380,
-              maxHeight: "80vh",
-              overflowY: "auto",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 18,
-              }}
-            >
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "white", borderRadius: 20, padding: 24, width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 18 }}>
               <div style={{ fontSize: 17, fontWeight: 700 }}>⚙️ Settings</div>
-              <button
-                onClick={() => setShowSettings(false)}
-                style={iconBtnStyle}
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowSettings(false)} style={iconBtnStyle}>✕</button>
             </div>
 
             <div style={settingLabel}>Language / Langue</div>
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
               {(["en", "fr"] as Lang[]).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => updatePref("language", l)}
-                  style={{
-                    ...chipStyle,
-                    ...(lang === l ? chipActiveStyle : {}),
-                  }}
-                >
+                <button key={l} onClick={() => updatePref("language", l)} style={{ ...chipStyle, ...(lang === l ? chipActiveStyle : {}) }}>
                   {l === "en" ? "🇬🇧 English" : "🇫🇷 Français"}
                 </button>
               ))}
             </div>
 
             <div style={settingLabel}>Mobility profile</div>
-            <div
-              style={{
-                display: "flex",
-                gap: 6,
-                flexWrap: "wrap",
-                marginBottom: 14,
-              }}
-            >
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
               {PROFILES.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => updatePref("profile", p)}
-                  style={{
-                    ...chipStyle,
-                    ...(profile === p ? chipActiveStyle : {}),
-                  }}
-                >
+                <button key={p} onClick={() => updatePref("profile", p)} style={{ ...chipStyle, ...(profile === p ? chipActiveStyle : {}) }}>
                   {PROFILE_ICONS[p]} {p}
                 </button>
               ))}
             </div>
 
             <div style={settingLabel}>Gemini API key (voice assistant)</div>
-            <input
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-              placeholder="AIza..."
-              style={{
-                ...inputFieldStyle,
-                marginBottom: 14,
-                fontFamily: "monospace",
-                fontSize: 12,
-              }}
-            />
+            <input value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="AIza..." style={{ ...inputFieldStyle, marginBottom: 14, fontFamily: "monospace", fontSize: 12 }} />
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "10px 0",
-                borderTop: "1px solid #E7E3DD",
-              }}
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid #E7E3DD" }}>
               <span style={{ fontSize: 14 }}>High contrast</span>
-              <div
-                onClick={() => updatePref("highContrast", !prefs.highContrast)}
-                style={{
-                  ...toggleStyle,
-                  background: prefs.highContrast ? "#FC4C02" : "#E7E3DD",
-                }}
-              >
-                <div
-                  style={{ ...toggleThumb, left: prefs.highContrast ? 18 : 2 }}
-                />
+              <div onClick={() => updatePref("highContrast", !prefs.highContrast)} style={{ ...toggleStyle, background: prefs.highContrast ? "#FC4C02" : "#E7E3DD" }}>
+                <div style={{ ...toggleThumb, left: prefs.highContrast ? 18 : 2 }} />
               </div>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "10px 0",
-                borderTop: "1px solid #E7E3DD",
-              }}
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid #E7E3DD" }}>
               <span style={{ fontSize: 14 }}>Large text</span>
-              <div
-                onClick={() => updatePref("largeText", !prefs.largeText)}
-                style={{
-                  ...toggleStyle,
-                  background: prefs.largeText ? "#FC4C02" : "#E7E3DD",
-                }}
-              >
-                <div
-                  style={{ ...toggleThumb, left: prefs.largeText ? 18 : 2 }}
-                />
+              <div onClick={() => updatePref("largeText", !prefs.largeText)} style={{ ...toggleStyle, background: prefs.largeText ? "#FC4C02" : "#E7E3DD" }}>
+                <div style={{ ...toggleThumb, left: prefs.largeText ? 18 : 2 }} />
               </div>
             </div>
 
             {user && (
-              <button
-                onClick={() => {
-                  handleLogout();
-                  setShowSettings(false);
-                }}
-                style={{
-                  ...primaryBtnStyle,
-                  marginTop: 16,
-                  background: "#EF4444",
-                }}
-              >
+              <button onClick={() => { handleLogout(); setShowSettings(false); }} style={{ ...primaryBtnStyle, marginTop: 16, background: "#EF4444" }}>
                 {t("logout", lang)}
               </button>
             )}
@@ -661,7 +410,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── FULL-SCREEN MAP ──────────────────────────────────────────────── */}
+      {/* ── MAP ─────────────────────────────────────────────────────────── */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
         <MapView
           center={mapCenter}
@@ -673,505 +422,156 @@ export default function App() {
           disabledParking={parking}
           onMapClick={handleMapClick}
           showAccessibilityLayer={showAccessibilityLayer}
+          setShowAccessibilityLayer={setShowAccessibilityLayer}
         />
       </div>
-      {/* ── TOP SEARCH BAR ──────────────────────────────────────────── */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          right: 12,
-          zIndex: 500,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          pointerEvents: "none",
-        }}
-      >
-        {/* Origin input */}
-        <div style={{ pointerEvents: "auto", position: "relative" }}>
-          <div style={searchCardStyle}>
-            <span style={{ fontSize: 16, flexShrink: 0 }}>🔵</span>
+
+      {/* ── TOP SEARCH BAR ──────────────────────────────────────────────── */}
+      <div style={{ position: "absolute", top: 12, left: 12, right: 12, zIndex: 500, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+
+        {/* Settings + user row */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", pointerEvents: "auto" }}>
+          <button onClick={() => setShowSettings(true)} style={glassCardIcon}>⚙️</button>
+          {user
+            ? <div style={glassCardUser}>{user.username}</div>
+            : <button onClick={() => setAuthPanel("login")} style={glassCardUser}>{t("login", lang)}</button>
+          }
+        </div>
+
+        {/* Origin search */}
+        <div style={{ position: "relative", pointerEvents: "auto" }}>
+          <div style={{ ...glassCard, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
+            <span style={{ fontSize: 14, flexShrink: 0 }}>🔵</span>
             <input
-              style={inputStyle}
-              placeholder="From — your location or any address"
+              style={searchInputStyle}
+              placeholder={t("searchFrom", lang)}
               value={originQuery}
               onChange={(e) => handleSearch(e.target.value, "origin")}
               onFocus={() => setActiveSearch("origin")}
             />
             {originQuery && (
-              <button
-                style={clearBtnStyle}
-                onClick={() => {
-                  setOriginQuery("");
-                  setOrigin(null);
-                  setOriginName("");
-                  setOriginSuggestions([]);
-                  setActiveSearch(null);
-                }}
-              >
-                ✕
-              </button>
+              <button style={clearBtn} onClick={() => { setOriginQuery(""); setOrigin(null); setOriginSuggestions([]); }}>✕</button>
             )}
           </div>
-          {activeSearch === "origin" ? (
+          {activeSearch === "origin" && (
             <div style={dropdownStyle}>
-              {"geolocation" in navigator ? (
+              {"geolocation" in navigator && (
                 <div
                   style={dropdownItemStyle}
-                  onClick={() => {
-                    getUserLocation();
-                    setActiveSearch(null);
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "rgba(252,76,2,0.08)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
+                  onClick={() => { getUserLocation(); setActiveSearch(null); }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(252,76,2,0.08)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
                   <span style={{ fontSize: 14 }}>🌐</span>
                   <div>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>
-                      Current location
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--muted)",
-                        marginTop: 1,
-                      }}
-                    >
-                      You
-                    </div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>Current location</div>
+                    <div style={{ fontSize: 11, color: "#6E6E68", marginTop: 1 }}>You</div>
                   </div>
                 </div>
-              ) : null}
-              {originSuggestions.length > 0
-                ? originSuggestions.map((loc, i) => (
-                    <div
-                      key={i}
-                      style={dropdownItemStyle}
-                      onClick={() => {
-                        pickOrigin(loc);
-                        setActiveSearch(null);
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(252,76,2,0.08)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                    >
-                      <span style={{ fontSize: 14 }}>📍</span>
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>
-                          {loc.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "var(--muted)",
-                            marginTop: 1,
-                          }}
-                        >
-                          {loc.fullName.split(",").slice(2, 4).join(",")}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                : null}
-            </div>
-          ) : null}
-        </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          style={{
-            ...glassCard,
-            padding: "8px 12px",
-            border: "none",
-            cursor: "pointer",
-            fontSize: 18,
-            pointerEvents: "auto",
-          }}
-        >
-          ⚙️
-        </button>
-        {user ? (
-          <div
-            style={{
-              ...glassCard,
-              padding: "8px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#FC4C02",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {user.username}
-          </div>
-        ) : (
-          <button
-            onClick={() => setAuthPanel("login")}
-            style={{
-              ...glassCard,
-              padding: "8px 12px",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#FC4C02",
-              pointerEvents: "auto",
-            }}
-          >
-            {t("login", lang)}
-          </button>
-        )}
-      </div>
-
-      {/* Origin search */}
-      <div
-        style={{ pointerEvents: "auto", position: "relative", marginBottom: 6 }}
-      >
-        <div
-          style={{
-            ...glassCard,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 14px",
-          }}
-        >
-          <span style={{ fontSize: 14, flexShrink: 0 }}>🔵</span>
-          <input
-            style={searchInputStyle}
-            placeholder={t("searchFrom", lang)}
-            value={originQuery}
-            onChange={(e) => handleSearch(e.target.value, "origin")}
-            onFocus={() => setActiveSearch("origin")}
-          />
-          {originQuery && (
-            <button
-              style={clearBtn}
-              onClick={() => {
-                setOriginQuery("");
-                setOrigin(null);
-                setOriginSuggestions([]);
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        {activeSearch === "origin" && originSuggestions.length > 0 && (
-          <div style={dropdownStyle}>
-            {originSuggestions.map((loc, i) => (
-              <div
-                key={i}
-                style={dropdownItemStyle}
-                onClick={() => pickOrigin(loc)}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#FFF1EB")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "transparent")
-                }
-              >
-                <span style={{ fontSize: 14, flexShrink: 0 }}>📍</span>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>
-                    {loc.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6E6E68" }}>
-                    {loc.fullName.split(",").slice(2, 4).join(",")}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Destination search */}
-      <div
-        style={{ pointerEvents: "auto", position: "relative", marginBottom: 8 }}
-      >
-        <div
-          style={{
-            ...glassCard,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 14px",
-          }}
-        >
-          <span style={{ fontSize: 14, flexShrink: 0 }}>📍</span>
-          <input
-            style={searchInputStyle}
-            placeholder={t("searchTo", lang)}
-            value={query}
-            onChange={(e) => handleSearch(e.target.value, "dest")}
-            onFocus={() => setActiveSearch("dest")}
-          />
-          {query && (
-            <button
-              style={clearBtn}
-              onClick={() => {
-                setQuery("");
-                setDestination(null);
-                setSuggestions([]);
-                setRoutes([]);
-                setPanel("search");
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        {activeSearch === "dest" && suggestions.length > 0 && (
-          <div style={dropdownStyle}>
-            {suggestions.map((loc, i) => (
-              <div
-                key={i}
-                style={dropdownItemStyle}
-                onClick={() => pickDest(loc)}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#FFF1EB")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "transparent")
-                }
-              >
-                <span style={{ fontSize: 14, flexShrink: 0 }}>📍</span>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>
-                    {loc.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6E6E68" }}>
-                    {loc.fullName.split(",").slice(2, 4).join(",")}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Profile chips */}
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          flexWrap: "wrap",
-          pointerEvents: "auto",
-        }}
-      >
-        {PROFILES.map((p) => (
-          <button
-            key={p}
-            onClick={() => updatePref("profile", p)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 20,
-              border: `1.5px solid ${profile === p ? "#FC4C02" : "#E7E3DD"}`,
-              background:
-                profile === p
-                  ? "rgba(255,241,235,0.97)"
-                  : "rgba(255,255,255,0.92)",
-              color: profile === p ? "#FC4C02" : "#6E6E68",
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: "pointer",
-              backdropFilter: "blur(8px)",
-              fontFamily: "inherit",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {PROFILE_ICONS[p]} {p}
-          </button>
-        ))}
-      </div>
-
-      {/* ── MAP HINT ─────────────────────────────────────────────────────── */}
-      {!destination && !loading && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%,-50%)",
-            background: "rgba(255,255,255,0.92)",
-            backdropFilter: "blur(8px)",
-            borderRadius: 14,
-            padding: "12px 18px",
-            fontSize: 13,
-            color: "#6E6E68",
-            zIndex: 100,
-            border: "0.5px solid #E7E3DD",
-            pointerEvents: "none",
-            textAlign: "center",
-            maxWidth: 260,
-          }}
-        >
-          {t("tapMap", lang)}
-        </div>
-      )}
-
-      {/* ── ACCESSIBILITY LAYER TOGGLE ───────────────────────────────── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "calc(55vh + 16px)",
-          right: 12,
-          zIndex: 500,
-        }}
-      >
-        <button
-          onClick={() => setShowAccessibilityLayer((v) => !v)}
-          title="Toggle accessibility overlay"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 12px",
-            borderRadius: 12,
-            background: showAccessibilityLayer
-              ? "#FC4C02"
-              : "rgba(255,255,255,0.97)",
-            color: showAccessibilityLayer ? "white" : "var(--text)",
-            border: `1.5px solid ${
-              showAccessibilityLayer ? "#FC4C02" : "var(--divider)"
-            }`,
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
-            fontFamily: "inherit",
-            backdropFilter: "blur(8px)",
-            transition: "all 0.15s",
-          }}
-        >
-          <span style={{ fontSize: 14 }}>🗺️</span>
-          {showAccessibilityLayer ? "Hide overlay" : "Show accessibility"}
-        </button>
-
-        {/* Legend — only visible when layer is on */}
-        {showAccessibilityLayer && (
-          <div
-            style={{
-              marginTop: 6,
-              background: "rgba(255,255,255,0.97)",
-              borderRadius: 12,
-              padding: "8px 10px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
-              border: "0.5px solid var(--divider)",
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            {[
-              { color: "#EF4444", label: "Stairs" },
-              { color: "#22C55E", label: "Elevator" },
-              { color: "#3B82F6", label: "Ramp" },
-              { color: "#A855F7", label: "Metro entrance" },
-              { color: "#10B981", label: "Accessible stop" },
-              { color: "#F59E0B", label: "Paratransit" },
-              { color: "#06B6D4", label: "Wheelchair OK" },
-            ].map(({ color, label }) => (
-              <div
-                key={label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 4,
-                }}
-              >
+              )}
+              {originSuggestions.map((loc, i) => (
                 <div
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    background: color,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ fontSize: 11, color: "var(--text)" }}>
-                  {label}
-                </span>
-              </div>
-            ))}
-            <div
+                  key={i}
+                  style={dropdownItemStyle}
+                  onClick={() => { pickOrigin(loc); setActiveSearch(null); }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(252,76,2,0.08)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <span style={{ fontSize: 14 }}>📍</span>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{loc.name}</div>
+                    <div style={{ fontSize: 11, color: "#6E6E68", marginTop: 1 }}>{loc.fullName.split(",").slice(2, 4).join(",")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Destination search */}
+        <div style={{ position: "relative", pointerEvents: "auto" }}>
+          <div style={{ ...glassCard, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
+            <span style={{ fontSize: 14, flexShrink: 0 }}>📍</span>
+            <input
+              style={searchInputStyle}
+              placeholder={t("searchTo", lang)}
+              value={query}
+              onChange={(e) => handleSearch(e.target.value, "dest")}
+              onFocus={() => setActiveSearch("dest")}
+            />
+            {query && (
+              <button style={clearBtn} onClick={() => { setQuery(""); setDestination(null); setSuggestions([]); setRoutes([]); setPanel("search"); }}>✕</button>
+            )}
+          </div>
+          {activeSearch === "dest" && suggestions.length > 0 && (
+            <div style={dropdownStyle}>
+              {suggestions.map((loc, i) => (
+                <div
+                  key={i}
+                  style={dropdownItemStyle}
+                  onClick={() => pickDest(loc)}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#FFF1EB")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>📍</span>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{loc.name}</div>
+                    <div style={{ fontSize: 11, color: "#6E6E68" }}>{loc.fullName.split(",").slice(2, 4).join(",")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Profile chips */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", pointerEvents: "auto" }}>
+          {PROFILES.map((p) => (
+            <button
+              key={p}
+              onClick={() => updatePref("profile", p)}
               style={{
-                borderTop: "0.5px solid var(--divider)",
-                marginTop: 4,
-                paddingTop: 4,
+                padding: "6px 12px",
+                borderRadius: 20,
+                border: `1.5px solid ${profile === p ? "#FC4C02" : "#E7E3DD"}`,
+                background: profile === p ? "rgba(255,241,235,0.97)" : "rgba(255,255,255,0.92)",
+                color: profile === p ? "#FC4C02" : "#6E6E68",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                backdropFilter: "blur(8px)",
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div
-                  style={{
-                    width: 30,
-                    height: 8,
-                    borderRadius: 2,
-                    background:
-                      "linear-gradient(to right, #22C55E, #EAB308, #EF4444)",
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ fontSize: 11, color: "var(--text)" }}>
-                  Slope: flat → steep
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+              {PROFILE_ICONS[p]} {p}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* ── BOTTOM PANEL ────────────────────────────────────────────── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 500,
-          background: "var(--surface)",
-          borderRadius: "22px 22px 0 0",
-          boxShadow: "0 -4px 30px rgba(0,0,0,0.12)",
-          border: "0.5px solid var(--divider)",
-          maxHeight: "55vh",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      {/* ── BOTTOM PANEL ────────────────────────────────────────────────── */}
+      <div style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 500,
+        background: "var(--surface, white)",
+        borderRadius: "22px 22px 0 0",
+        boxShadow: "0 -4px 30px rgba(0,0,0,0.12)",
+        border: "0.5px solid var(--divider, #E7E3DD)",
+        maxHeight: "55vh",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}>
         {/* Handle */}
         <div style={{ padding: "12px 18px 0", flexShrink: 0 }}>
-          <div
-            style={{
-              width: 38,
-              height: 4,
-              background: "#E7E3DD",
-              borderRadius: 2,
-              margin: "0 auto 10px",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ width: 38, height: 4, background: "#E7E3DD", borderRadius: 2, margin: "0 auto 10px" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#1F1F1C" }}>
-              {panel === "search"
-                ? "way·go"
-                : panel === "routes"
-                ? t("routes", lang)
-                : t("navigating", lang)}
+              {panel === "search" ? "way·go" : panel === "routes" ? t("routes", lang) : t("navigating", lang)}
             </div>
             <button
               onClick={toggleVoice}
@@ -1195,46 +595,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* Scrollable content area */}
-        <div
-          style={{
-            overflowY: "auto",
-            padding: "10px 18px 24px",
-            flex: 1,
-            WebkitOverflowScrolling: "touch",
-          }}
-        >
+        {/* Scrollable content */}
+        <div style={{ overflowY: "auto", padding: "10px 18px 24px", flex: 1, WebkitOverflowScrolling: "touch" }}>
+
           {/* Agent log */}
           {showLog && agentLog.length > 0 && (
-            <div
-              ref={logRef}
-              style={{
-                background: "#1F1F1C",
-                borderRadius: 12,
-                padding: "10px 14px",
-                fontFamily: "monospace",
-                fontSize: 11,
-                lineHeight: 1.8,
-                maxHeight: 120,
-                overflowY: "auto",
-                marginBottom: 10,
-              }}
-            >
+            <div ref={logRef} style={{ background: "#1F1F1C", borderRadius: 12, padding: "10px 14px", fontFamily: "monospace", fontSize: 11, lineHeight: 1.8, maxHeight: 120, overflowY: "auto", marginBottom: 10 }}>
               {agentLog.map((e, i) => (
-                <div
-                  key={i}
-                  style={{
-                    color:
-                      e.type === "agent"
-                        ? "#FC4C02"
-                        : e.type === "tool"
-                        ? "#60a5fa"
-                        : e.type === "result"
-                        ? "#34d399"
-                        : "#9CA3AF",
-                    fontStyle: e.type === "think" ? "italic" : "normal",
-                  }}
-                >
+                <div key={i} style={{ color: e.type === "agent" ? "#FC4C02" : e.type === "tool" ? "#60a5fa" : e.type === "result" ? "#34d399" : "#9CA3AF", fontStyle: e.type === "think" ? "italic" : "normal" }}>
                   {e.message}
                 </div>
               ))}
@@ -1243,42 +611,24 @@ export default function App() {
           )}
 
           {/* ── SEARCH PANEL ── */}
-          {panel === "search" &&
-            !loading &&
-            (destination ? (
+          {panel === "search" && !loading && (
+            destination ? (
               <>
-                <div
-                  style={{ fontSize: 13, color: "#6E6E68", marginBottom: 10 }}
-                >
+                <div style={{ fontSize: 13, color: "#6E6E68", marginBottom: 10 }}>
                   {lang === "fr" ? "Destination :" : "Destination:"}{" "}
                   <strong style={{ color: "#1F1F1C" }}>{destName}</strong>
                 </div>
-                <button onClick={findRoutes} style={primaryBtnStyle}>
-                  {t("findRoute", lang)}
-                </button>
+                <button onClick={findRoutes} style={primaryBtnStyle}>{t("findRoute", lang)}</button>
               </>
             ) : (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#6E6E68",
-                  textAlign: "center",
-                  padding: "8px 0",
-                }}
-              >
+              <div style={{ fontSize: 13, color: "#6E6E68", textAlign: "center", padding: "8px 0" }}>
                 {t("tapMap", lang)}
               </div>
-            ))}
+            )
+          )}
 
           {loading && (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#6E6E68",
-                textAlign: "center",
-                padding: "8px 0",
-              }}
-            >
+            <div style={{ fontSize: 13, color: "#6E6E68", textAlign: "center", padding: "8px 0" }}>
               {t("findingRoutes", lang)}
             </div>
           )}
@@ -1286,137 +636,40 @@ export default function App() {
           {/* ── ROUTES PANEL ── */}
           {panel === "routes" && routes.length > 0 && (
             <>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 6,
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#6E6E68" }}>
-                  {t("sortedBy", lang)}
-                </div>
-                <button
-                  onClick={() => {
-                    setPanel("search");
-                    setRoutes([]);
-                  }}
-                  style={textBtnStyle}
-                >
-                  {t("back", lang)}
-                </button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: "#6E6E68" }}>{t("sortedBy", lang)}</div>
+                <button onClick={() => { setPanel("search"); setRoutes([]); }} style={textBtnStyle}>{t("back", lang)}</button>
               </div>
 
               {routes.map((r, i) => (
                 <div
                   key={i}
                   onClick={() => setSelectedRoute(i)}
-                  style={{
-                    background: i === selectedRoute ? "#FFF1EB" : "#F7F6F3",
-                    border: `1.5px solid ${
-                      i === selectedRoute ? "#FC4C02" : "#E7E3DD"
-                    }`,
-                    borderRadius: 14,
-                    padding: "12px 14px",
-                    marginBottom: 8,
-                    cursor: "pointer",
-                  }}
+                  style={{ background: i === selectedRoute ? "#FFF1EB" : "#F7F6F3", border: `1.5px solid ${i === selectedRoute ? "#FC4C02" : "#E7E3DD"}`, borderRadius: 14, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <div
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: 3,
-                          background: r.color,
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>
-                        {r.name}
-                      </span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 12, height: 12, borderRadius: 3, background: r.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</span>
                       {i === 0 && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            padding: "2px 7px",
-                            borderRadius: 8,
-                            background: "#FC4C02",
-                            color: "white",
-                            fontWeight: 600,
-                          }}
-                        >
+                        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 8, background: "#FC4C02", color: "white", fontWeight: 600 }}>
                           {t("best", lang)}
                         </span>
                       )}
                     </div>
                     <span style={{ fontSize: 12, color: "#6E6E68" }}>
-                      {r.timeMin} {t("min", lang)} ·{" "}
-                      {r.distanceM >= 1000
-                        ? (r.distanceM / 1000).toFixed(1) + " km"
-                        : r.distanceM + " m"}
+                      {r.timeMin} {t("min", lang)} · {r.distanceM >= 1000 ? (r.distanceM / 1000).toFixed(1) + " km" : r.distanceM + " m"}
                     </span>
                   </div>
-                  <div
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: "#FC4C02",
-                      marginBottom: 4,
-                    }}
-                  >
-                    {r.score}
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "#6E6E68",
-                        fontWeight: 400,
-                      }}
-                    >
-                      /100 {t("accessibility", lang)}
-                    </span>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#FC4C02", marginBottom: 4 }}>
+                    {r.score}<span style={{ fontSize: 12, color: "#6E6E68", fontWeight: 400 }}>/100 {t("accessibility", lang)}</span>
                   </div>
                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                     {r.tags.map((tg) => (
-                      <span
-                        key={tg}
-                        style={{
-                          fontSize: 10,
-                          padding: "2px 7px",
-                          borderRadius: 8,
-                          background: "#D1FAE5",
-                          color: "#065F46",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {tg}
-                      </span>
+                      <span key={tg} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 8, background: "#D1FAE5", color: "#065F46", fontWeight: 500 }}>{tg}</span>
                     ))}
                     {r.penalties.map((p) => (
-                      <span
-                        key={p}
-                        style={{
-                          fontSize: 10,
-                          padding: "2px 7px",
-                          borderRadius: 8,
-                          background: "#FEF3C7",
-                          color: "#92400E",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {p}
-                      </span>
+                      <span key={p} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 8, background: "#FEF3C7", color: "#92400E", fontWeight: 500 }}>{p}</span>
                     ))}
                   </div>
                 </div>
@@ -1425,31 +678,10 @@ export default function App() {
               {/* Transit stops */}
               {transitStops.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "#2563EB",
-                      marginBottom: 6,
-                    }}
-                  >
-                    🚌 {t("transitStops", lang)}
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#2563EB", marginBottom: 6 }}>🚌 {t("transitStops", lang)}</div>
                   {transitStops.slice(0, 4).map((s, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: "#EFF6FF",
-                        border: "1px solid #BFDBFE",
-                        borderRadius: 10,
-                        padding: "8px 12px",
-                        marginBottom: 5,
-                        fontSize: 12,
-                      }}
-                    >
-                      <span style={{ fontWeight: 600 }}>{s.name}</span> ·{" "}
-                      {s.type} {s.accessible ? "♿" : ""}{" "}
-                      {s.lines.length ? `(${s.lines.join(", ")})` : ""}
+                    <div key={i} style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "8px 12px", marginBottom: 5, fontSize: 12 }}>
+                      <span style={{ fontWeight: 600 }}>{s.name}</span> · {s.type} {s.accessible ? "♿" : ""} {s.lines.length ? `(${s.lines.join(", ")})` : ""}
                     </div>
                   ))}
                 </div>
@@ -1458,175 +690,56 @@ export default function App() {
               {/* Disabled parking */}
               {parking.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "#1E40AF",
-                      marginBottom: 6,
-                    }}
-                  >
-                    P♿ {t("parkingSpots", lang)}
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#1E40AF", marginBottom: 6 }}>P♿ {t("parkingSpots", lang)}</div>
                   {parking.slice(0, 3).map((p, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: "#EFF6FF",
-                        border: "1px solid #BFDBFE",
-                        borderRadius: 10,
-                        padding: "8px 12px",
-                        marginBottom: 5,
-                        fontSize: 12,
-                      }}
-                    >
-                      <span style={{ fontWeight: 600 }}>{p.name}</span> ·{" "}
-                      {p.spots} spot{p.spots !== 1 ? "s" : ""}{" "}
-                      {p.free ? "· Free" : ""}
+                    <div key={i} style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "8px 12px", marginBottom: 5, fontSize: 12 }}>
+                      <span style={{ fontWeight: 600 }}>{p.name}</span> · {p.spots} spot{p.spots !== 1 ? "s" : ""} {p.free ? "· Free" : ""}
                     </div>
                   ))}
                 </div>
               )}
 
-              <button
-                onClick={() => {
-                  setPanel("nav");
-                  setNavStep(0);
-                }}
-                style={primaryBtnStyle}
-              >
-                {t("startNav", lang)}
-              </button>
+              <button onClick={() => { setPanel("nav"); setNavStep(0); }} style={primaryBtnStyle}>{t("startNav", lang)}</button>
             </>
           )}
 
           {/* ── NAV PANEL ── */}
           {panel === "nav" && currentRoute && (
             <>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 10,
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#6E6E68" }}>
-                  {t("step", lang)} {navStep + 1} {t("of", lang)} {totalSteps}
-                </div>
-                <button onClick={() => setPanel("routes")} style={textBtnStyle}>
-                  {t("back", lang)}
-                </button>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#6E6E68" }}>{t("step", lang)} {navStep + 1} {t("of", lang)} {totalSteps}</div>
+                <button onClick={() => setPanel("routes")} style={textBtnStyle}>{t("back", lang)}</button>
               </div>
 
               {/* Current instruction */}
               {steps[navStep] && (
-                <div
-                  style={{
-                    background: "#F7F6F3",
-                    borderRadius: 14,
-                    padding: "12px 14px",
-                    marginBottom: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: "#1F1F1C",
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {steps[navStep].instruction}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#FC4C02",
-                      fontWeight: 700,
-                      marginTop: 6,
-                    }}
-                  >
-                    {steps[navStep].distanceM < 1000
-                      ? steps[navStep].distanceM + " m"
-                      : (steps[navStep].distanceM / 1000).toFixed(1) + " km"}
+                <div style={{ background: "#F7F6F3", borderRadius: 14, padding: "12px 14px", marginBottom: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1F1F1C", lineHeight: 1.4 }}>{steps[navStep].instruction}</div>
+                  <div style={{ fontSize: 13, color: "#FC4C02", fontWeight: 700, marginTop: 6 }}>
+                    {steps[navStep].distanceM < 1000 ? steps[navStep].distanceM + " m" : (steps[navStep].distanceM / 1000).toFixed(1) + " km"}
                   </div>
                 </div>
               )}
 
               {/* Progress bar */}
-              <div
-                style={{
-                  height: 4,
-                  background: "#E7E3DD",
-                  borderRadius: 2,
-                  overflow: "hidden",
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: progressPct + "%",
-                    background: "#FC4C02",
-                    borderRadius: 2,
-                    transition: "width 0.4s",
-                  }}
-                />
+              <div style={{ height: 4, background: "#E7E3DD", borderRadius: 2, overflow: "hidden", marginBottom: 10 }}>
+                <div style={{ height: "100%", width: progressPct + "%", background: "#FC4C02", borderRadius: 2, transition: "width 0.4s" }} />
               </div>
 
               {/* ETA */}
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#6E6E68",
-                  marginBottom: 10,
-                  textAlign: "center",
-                }}
-              >
-                {currentRoute.timeMin -
-                  Math.round(
-                    (navStep * currentRoute.timeMin) / Math.max(totalSteps, 1)
-                  )}{" "}
-                {t("min", lang)} {lang === "fr" ? "restantes" : "remaining"} ·{" "}
-                {currentRoute.distanceM >= 1000
-                  ? (currentRoute.distanceM / 1000).toFixed(1) + " km"
-                  : currentRoute.distanceM + " m"}{" "}
-                {lang === "fr" ? "au total" : "total"}
+              <div style={{ fontSize: 13, color: "#6E6E68", marginBottom: 10, textAlign: "center" }}>
+                {currentRoute.timeMin - Math.round((navStep * currentRoute.timeMin) / Math.max(totalSteps, 1))} {t("min", lang)} {lang === "fr" ? "restantes" : "remaining"} · {currentRoute.distanceM >= 1000 ? (currentRoute.distanceM / 1000).toFixed(1) + " km" : currentRoute.distanceM + " m"} {lang === "fr" ? "au total" : "total"}
               </div>
 
               {/* Bonuses */}
               {currentRoute.bonuses.map((b) => (
-                <div
-                  key={b}
-                  style={{
-                    background: "#D1FAE5",
-                    borderRadius: 10,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    color: "#065F46",
-                    marginBottom: 5,
-                    fontWeight: 500,
-                  }}
-                >
-                  ✓ {b}
-                </div>
+                <div key={b} style={{ background: "#D1FAE5", borderRadius: 10, padding: "6px 10px", fontSize: 12, color: "#065F46", marginBottom: 5, fontWeight: 500 }}>✓ {b}</div>
               ))}
 
               {/* Preview next step */}
               {steps[navStep + 1] && (
-                <div
-                  style={{
-                    background: "#F7F6F3",
-                    borderRadius: 10,
-                    padding: "8px 12px",
-                    marginBottom: 10,
-                    fontSize: 12,
-                    color: "#6E6E68",
-                    borderLeft: "3px solid #E7E3DD",
-                  }}
-                >
-                  {lang === "fr" ? "Ensuite :" : "Then:"}{" "}
-                  {steps[navStep + 1].instruction}
+                <div style={{ background: "#F7F6F3", borderRadius: 10, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: "#6E6E68", borderLeft: "3px solid #E7E3DD" }}>
+                  {lang === "fr" ? "Ensuite :" : "Then:"} {steps[navStep + 1].instruction}
                 </div>
               )}
 
@@ -1634,13 +747,7 @@ export default function App() {
                 <button
                   onClick={() => setNavStep((s) => Math.max(0, s - 1))}
                   disabled={navStep === 0}
-                  style={{
-                    ...primaryBtnStyle,
-                    flex: 1,
-                    background: "#F7F6F3",
-                    color: "#1F1F1C",
-                    border: "1px solid #E7E3DD",
-                  }}
+                  style={{ ...primaryBtnStyle, flex: 1, background: "#F7F6F3", color: "#1F1F1C", border: "1px solid #E7E3DD" }}
                 >
                   {t("prevStep", lang)}
                 </button>
@@ -1649,9 +756,7 @@ export default function App() {
                   disabled={navStep >= totalSteps}
                   style={{ ...primaryBtnStyle, flex: 2 }}
                 >
-                  {navStep >= totalSteps
-                    ? t("arrived", lang)
-                    : t("nextStep", lang)}
+                  {navStep >= totalSteps ? t("arrived", lang) : t("nextStep", lang)}
                 </button>
               </div>
             </>
@@ -1670,40 +775,6 @@ const glassCard: React.CSSProperties = {
   boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
   border: "0.5px solid rgba(0,0,0,0.07)",
 };
-
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  background: "transparent",
-  border: "none",
-  outline: "none",
-  fontSize: 14,
-  color: "var(--text)",
-  fontFamily: "inherit",
-};
-
-const searchCardStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  background: "rgba(255,255,255,0.97)",
-  backdropFilter: "blur(12px)",
-  borderRadius: 14,
-  padding: "10px 14px",
-  boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
-  border: "0.5px solid rgba(0,0,0,0.08)",
-};
-
-const clearBtnStyle: React.CSSProperties = {
-  background: "none",
-  border: "none",
-  cursor: "pointer",
-  color: "var(--muted)",
-  fontSize: 14,
-  padding: 0,
-  flexShrink: 0,
-  fontFamily: "inherit",
-};
-
 const searchInputStyle: React.CSSProperties = {
   flex: 1,
   background: "transparent",
@@ -1826,4 +897,23 @@ const settingLabel: React.CSSProperties = {
   marginBottom: 6,
   textTransform: "uppercase",
   letterSpacing: "0.05em",
+};
+const glassCardIcon: React.CSSProperties = {
+  background: "white",
+  padding: 10,
+  borderRadius: 12,
+  border: "none",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+  cursor: "pointer",
+};
+const glassCardUser: React.CSSProperties = {
+  background: "white",
+  padding: "10px 15px",
+  borderRadius: 12,
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#FC4C02",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+  border: "none",
+  cursor: "pointer",
 };
