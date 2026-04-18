@@ -93,11 +93,18 @@ export default function App() {
   const [mapCenter, setMapCenter]       = useState(DEFAULT_CENTER);
   const [routes, setRoutes]             = useState<RouteResult[]>([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
+  const [currentLocation, _setCurrLocation] = useState<number[]>([]);
   const [loading, setLoading]           = useState(false);
   const [agentLog, setAgentLog]         = useState<{ type: string; message: string }[]>([]);
   const [showLog, setShowLog]           = useState(false);
   const [panel, setPanel]               = useState<"search" | "routes" | "nav">("search");
   const [navStep, setNavStep]           = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [agentLog, setAgentLog] = useState<LogEntry[]>([]);
+  const [showLog, setShowLog] = useState(false);
+  const [panel, setPanel] = useState<"search" | "routes" | "nav">("search");
+  const [navStep, setNavStep] = useState(0);
+  const [showAccessibilityLayer, setShowAccessibilityLayer] = useState(false);
   const [transitStops, setTransitStops] = useState<TransitStop[]>([]);
   const [parking, setParking]           = useState<DisabledParking[]>([]);
 
@@ -341,24 +348,117 @@ export default function App() {
           routes={routes} selectedRouteIndex={selectedRoute}
           transitStops={transitStops} disabledParking={parking}
           onMapClick={handleMapClick}
+          showAccessibilityLayer={showAccessibilityLayer}
         />
       </div>
-
-      {/* ── TOP BAR ──────────────────────────────────────────────────────── */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 500, padding: "10px 12px 0", pointerEvents: "none" }}>
-
-        {/* Logo row + auth + settings */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 8, pointerEvents: "auto" }}>
-          <div style={{ ...glassCard, padding: "8px 14px", display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.5 }}>way<span style={{ color: "#FC4C02" }}>·</span>go</span>
-            {/* Transport mode tabs */}
-            <div style={{ display: "flex", gap: 4, flex: 1 }}>
-              {TRANSPORT_MODES.map((m) => (
-                <button key={m.id} onClick={() => updatePref("transportMode", m.id)}
-                  style={{ flex: 1, padding: "4px 6px", borderRadius: 10, border: `1.5px solid ${transportMode === m.id ? "#FC4C02" : "#E7E3DD"}`, background: transportMode === m.id ? "#FFF1EB" : "transparent", color: transportMode === m.id ? "#FC4C02" : "#6E6E68", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                  {m.icon} <span style={{ display: "none" }}>{m[lang === "fr" ? "fr" : "en"]}</span>
-                </button>
-              ))}
+      {/* ── TOP SEARCH BAR ──────────────────────────────────────────── */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          left: 12,
+          right: 12,
+          zIndex: 500,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          pointerEvents: "none",
+        }}
+      >
+        {/* Origin input */}
+        <div style={{ pointerEvents: "auto", position: "relative" }}>
+          <div style={searchCardStyle}>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>🔵</span>
+            <input
+              style={inputStyle}
+              placeholder="From — your location or any address"
+              value={originQuery}
+              onChange={(e) => handleSearch(e.target.value, "origin")}
+              onFocus={() => setActiveSearch("origin")}
+            />
+            {originQuery && (
+              <button
+                style={clearBtnStyle}
+                onClick={() => {
+                  setOriginQuery("");
+                  setOrigin(null);
+                  setOriginName("");
+                  setOriginSuggestions([]);
+                  setActiveSearch(null);
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {activeSearch === "origin" ? (
+            <div style={dropdownStyle}>
+              {"geolocation" in navigator ? (
+                <div
+                  style={dropdownItemStyle}
+                  onClick={() => {
+                    getUserLocation();
+                    setActiveSearch(null);
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "rgba(252,76,2,0.08)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  <span style={{ fontSize: 14 }}>🌐</span>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>
+                      Current location
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--muted)",
+                        marginTop: 1,
+                      }}
+                    >
+                      You
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {originSuggestions.length > 0
+                ? originSuggestions.map((loc, i) => (
+                    <div
+                      key={i}
+                      style={dropdownItemStyle}
+                      onClick={() => {
+                        pickOrigin(loc);
+                        setActiveSearch(null);
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background =
+                          "rgba(252,76,2,0.08)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
+                    >
+                      <span style={{ fontSize: 14 }}>📍</span>
+                      <div>
+                        <div style={{ fontWeight: 500, fontSize: 13 }}>
+                          {loc.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "var(--muted)",
+                            marginTop: 1,
+                          }}
+                        >
+                          {loc.fullName.split(",").slice(2, 4).join(",")}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                : null}
             </div>
           </div>
           <button onClick={() => setShowSettings(true)} style={{ ...glassCard, padding: "8px 12px", border: "none", cursor: "pointer", fontSize: 18, pointerEvents: "auto" }}>⚙️</button>
@@ -433,31 +533,135 @@ export default function App() {
         </div>
       )}
 
-      {/* ── VOICE BUBBLE ─────────────────────────────────────────────────── */}
-      {voiceActive && (
-        <div style={{ position: "absolute", top: "48%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 300, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(12px)", borderRadius: 20, padding: "16px 20px", maxWidth: 300, textAlign: "center", boxShadow: "0 8px 30px rgba(0,0,0,0.15)" }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>{voiceStatus === "listening" ? "🎙️" : voiceStatus === "thinking" ? "🤔" : voiceStatus === "speaking" ? "🔊" : "🎙️"}</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: voiceColor[voiceStatus] }}>{t(voiceStatus, lang)}</div>
-          {transcript && <div style={{ fontSize: 12, color: "#6E6E68", marginTop: 4, fontStyle: "italic" }}>"{transcript}"</div>}
-          {assistantText && <div style={{ fontSize: 13, color: "#1F1F1C", marginTop: 6 }}>{assistantText}</div>}
-        </div>
-      )}
+      {/* ── ACCESSIBILITY LAYER TOGGLE ───────────────────────────────── */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "calc(55vh + 16px)",
+          right: 12,
+          zIndex: 500,
+        }}
+      >
+        <button
+          onClick={() => setShowAccessibilityLayer((v) => !v)}
+          title="Toggle accessibility overlay"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 12px",
+            borderRadius: 12,
+            background: showAccessibilityLayer
+              ? "#FC4C02"
+              : "rgba(255,255,255,0.97)",
+            color: showAccessibilityLayer ? "white" : "var(--text)",
+            border: `1.5px solid ${
+              showAccessibilityLayer ? "#FC4C02" : "var(--divider)"
+            }`,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
+            fontFamily: "inherit",
+            backdropFilter: "blur(8px)",
+            transition: "all 0.15s",
+          }}
+        >
+          <span style={{ fontSize: 14 }}>🗺️</span>
+          {showAccessibilityLayer ? "Hide overlay" : "Show accessibility"}
+        </button>
 
-      {/* ── BOTTOM PANEL ─────────────────────────────────────────────────── */}
-      {/* This is a FIXED bottom panel — it does not scroll with the page */}
-      <div style={{
-        position: "fixed",
-        bottom: 0, left: 0, right: 0,
-        zIndex: 500,
-        background: "white",
-        borderRadius: "22px 22px 0 0",
-        boxShadow: "0 -4px 30px rgba(0,0,0,0.12)",
-        border: "0.5px solid #E7E3DD",
-        maxHeight: "52vh",
-        display: "flex",
-        flexDirection: "column",
-      }}>
-        {/* Handle + voice button — always visible, never scrolls */}
+        {/* Legend — only visible when layer is on */}
+        {showAccessibilityLayer && (
+          <div
+            style={{
+              marginTop: 6,
+              background: "rgba(255,255,255,0.97)",
+              borderRadius: 12,
+              padding: "8px 10px",
+              boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
+              border: "0.5px solid var(--divider)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {[
+              { color: "#EF4444", label: "Stairs" },
+              { color: "#22C55E", label: "Elevator" },
+              { color: "#3B82F6", label: "Ramp" },
+              { color: "#A855F7", label: "Metro entrance" },
+              { color: "#10B981", label: "Accessible stop" },
+              { color: "#F59E0B", label: "Paratransit" },
+              { color: "#06B6D4", label: "Wheelchair OK" },
+            ].map(({ color, label }) => (
+              <div
+                key={label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 4,
+                }}
+              >
+                <div
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ fontSize: 11, color: "var(--text)" }}>
+                  {label}
+                </span>
+              </div>
+            ))}
+            <div
+              style={{
+                borderTop: "0.5px solid var(--divider)",
+                marginTop: 4,
+                paddingTop: 4,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div
+                  style={{
+                    width: 30,
+                    height: 8,
+                    borderRadius: 2,
+                    background:
+                      "linear-gradient(to right, #22C55E, #EAB308, #EF4444)",
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ fontSize: 11, color: "var(--text)" }}>
+                  Slope: flat → steep
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── BOTTOM PANEL ────────────────────────────────────────────── */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 500,
+          background: "var(--surface)",
+          borderRadius: "22px 22px 0 0",
+          boxShadow: "0 -4px 30px rgba(0,0,0,0.12)",
+          border: "0.5px solid var(--divider)",
+          maxHeight: "55vh",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Handle */}
         <div style={{ padding: "12px 18px 0", flexShrink: 0 }}>
           <div style={{ width: 38, height: 4, background: "#E7E3DD", borderRadius: 2, margin: "0 auto 10px" }} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

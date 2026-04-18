@@ -70,23 +70,23 @@ function parseOSRMManeuver(maneuver: any, name: string): NavStep["direction"] {
   const type = maneuver?.type ?? "";
   const modifier = maneuver?.modifier ?? "";
   if (type === "arrive") return "arrive";
-  if (modifier === "left")        return "left";
-  if (modifier === "right")       return "right";
+  if (modifier === "left") return "left";
+  if (modifier === "right") return "right";
   if (modifier === "slight left") return "slight-left";
-  if (modifier === "slight right")return "slight-right";
-  if (modifier === "uturn")       return "u-turn";
+  if (modifier === "slight right") return "slight-right";
+  if (modifier === "uturn") return "u-turn";
   return "straight";
 }
 
 function directionIcon(d: NavStep["direction"]): string {
   switch (d) {
-    case "left":        return "↰";
-    case "right":       return "↱";
+    case "left": return "↰";
+    case "right": return "↱";
     case "slight-left": return "↖";
-    case "slight-right":return "↗";
-    case "u-turn":      return "↩";
-    case "arrive":      return "📍";
-    default:            return "↑";
+    case "slight-right": return "↗";
+    case "u-turn": return "↩";
+    case "arrive": return "📍";
+    default: return "↑";
   }
 }
 
@@ -102,26 +102,189 @@ function buildInstruction(direction: NavStep["direction"], streetName: string, d
 
   if (lang === "fr") {
     switch (direction) {
-      case "left":         return `${icon} Tournez à gauche sur ${street} dans ${dist}`;
-      case "right":        return `${icon} Tournez à droite sur ${street} dans ${dist}`;
-      case "slight-left":  return `${icon} Gardez la gauche vers ${street} dans ${dist}`;
+      case "left": return `${icon} Tournez à gauche sur ${street} dans ${dist}`;
+      case "right": return `${icon} Tournez à droite sur ${street} dans ${dist}`;
+      case "slight-left": return `${icon} Gardez la gauche vers ${street} dans ${dist}`;
       case "slight-right": return `${icon} Gardez la droite vers ${street} dans ${dist}`;
-      case "u-turn":       return `${icon} Faites demi-tour sur ${street}`;
-      case "arrive":       return `${icon} Vous êtes arrivé à destination`;
-      default:             return `${icon} Continuez tout droit sur ${street} pendant ${dist}`;
+      case "u-turn": return `${icon} Faites demi-tour sur ${street}`;
+      case "arrive": return `${icon} Vous êtes arrivé à destination`;
+      default: return `${icon} Continuez tout droit sur ${street} pendant ${dist}`;
     }
   }
 
   switch (direction) {
-    case "left":         return `${icon} Turn left on ${street} in ${dist}`;
-    case "right":        return `${icon} Turn right on ${street} in ${dist}`;
-    case "slight-left":  return `${icon} Keep left toward ${street} in ${dist}`;
+    case "left": return `${icon} Turn left on ${street} in ${dist}`;
+    case "right": return `${icon} Turn right on ${street} in ${dist}`;
+    case "slight-left": return `${icon} Keep left toward ${street} in ${dist}`;
     case "slight-right": return `${icon} Keep right toward ${street} in ${dist}`;
-    case "u-turn":       return `${icon} Make a U-turn on ${street}`;
-    case "arrive":       return `${icon} You have arrived at your destination`;
-    default:             return `${icon} Continue straight on ${street} for ${dist}`;
+    case "u-turn": return `${icon} Make a U-turn on ${street}`;
+    case "arrive": return `${icon} You have arrived at your destination`;
+    default: return `${icon} Continue straight on ${street} for ${dist}`;
   }
 }
+
+// ── Accessibility data types (from data.json) ────────────────────────────────
+
+interface OsmFeature {
+  geometry: { type: string; coordinates: number[] | number[][] };
+  tags?: Record<string, string>;
+  surface?: string;
+}
+
+interface AccessibilityData {
+  stairs: OsmFeature[];
+  elevators: OsmFeature[];
+  ramps: OsmFeature[];
+  surfaces: OsmFeature[];
+  metro_entrances: OsmFeature[];
+  wheelchair_yes: OsmFeature[];
+  wheelchair_no: OsmFeature[];
+  entrances: OsmFeature[];
+  bus_stops_accessible: OsmFeature[];
+  bus_stops_standard: OsmFeature[];
+  paratransit_stops: OsmFeature[];
+}
+
+interface AccessibilityDataFile {
+  data: AccessibilityData;
+  bounds: { north: number; south: number; east: number; west: number };
+  elevation_grid: number[][] | null;
+  lats: number[] | null;
+  lons: number[] | null;
+  slope_grid: number[][] | null;
+}
+
+// ── Module-level cache ───────────────────────────────────────────────────────
+
+let _accessibilityCache: AccessibilityDataFile | null = null;
+let _loadPromise: Promise<AccessibilityDataFile | null> | null = null;
+
+export async function loadAccessibilityData(): Promise<AccessibilityDataFile | null> {
+  if (_accessibilityCache) return _accessibilityCache;
+  if (_loadPromise) return _loadPromise;
+
+  _loadPromise = (async () => {
+    try {
+      const res = await fetch("/data.json");
+      if (!res.ok) return null;
+      const raw = await res.json();
+      _accessibilityCache = raw as AccessibilityDataFile;
+      return _accessibilityCache;
+    } catch {
+      return null;
+    }
+  })();
+
+  return _loadPromise;
+}
+
+// ── Geometry helpers ─────────────────────────────────────────────────────────
+
+/** Extract a representative [lng, lat] point from a GeoJSON-like geometry object. */
+function featurePoint(f: OsmFeature): [number, number] | null {
+  const g = f.geometry;
+  if (!g) return null;
+  if (g.type === "Point") {
+    const c = g.coordinates as number[];
+    return [c[0], c[1]];
+  }
+  if (g.type === "LineString") {
+    const coords = g.coordinates as number[][];
+    if (!coords.length) return null;
+    // Use the midpoint of the line
+    const mid = coords[Math.floor(coords.length / 2)];
+    return [mid[0], mid[1]];
+  }
+  return null;
+}
+
+/** Haversine distance in metres between two [lng, lat] points. */
+function haversineM(a: [number, number], b: [number, number]): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+/**
+ * Count features within `radiusM` metres of any waypoint in the route.
+ * Uses a coarse bounding-box pre-filter for performance.
+ */
+function countNearby(
+  features: OsmFeature[],
+  waypoints: LatLng[],
+  radiusM: number
+): number {
+  if (!features.length || !waypoints.length) return 0;
+
+  // Build bounding box of the route (with padding)
+  const pad = radiusM / 111_320;
+  const minLat = Math.min(...waypoints.map((w) => w.lat)) - pad;
+  const maxLat = Math.max(...waypoints.map((w) => w.lat)) + pad;
+  const minLng = Math.min(...waypoints.map((w) => w.lng)) - pad;
+  const maxLng = Math.max(...waypoints.map((w) => w.lng)) + pad;
+
+  let count = 0;
+  for (const f of features) {
+    const pt = featurePoint(f);
+    if (!pt) continue;
+    const [fLng, fLat] = pt;
+    // Bounding-box pre-filter
+    if (fLat < minLat || fLat > maxLat || fLng < minLng || fLng > maxLng) continue;
+    // Full haversine check against each waypoint
+    for (const wp of waypoints) {
+      if (haversineM([wp.lng, wp.lat], [fLng, fLat]) <= radiusM) {
+        count++;
+        break; // only count once per feature
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * Sample slope values from the grid along the route waypoints.
+ * Returns { maxSlope, avgSlope } in percent.
+ */
+function sampleSlope(
+  slope_grid: number[][],
+  lats: number[],
+  lons: number[],
+  waypoints: LatLng[]
+): { maxSlope: number; avgSlope: number } {
+  if (!slope_grid.length || !lats.length || !lons.length || !waypoints.length) {
+    return { maxSlope: 0, avgSlope: 0 };
+  }
+
+  const latMin = lats[0], latMax = lats[lats.length - 1];
+  const lonMin = lons[0], lonMax = lons[lons.length - 1];
+  const rows = slope_grid.length;
+  const cols = slope_grid[0].length;
+
+  const samples: number[] = [];
+  for (const wp of waypoints) {
+    const r = Math.round(((wp.lat - latMin) / (latMax - latMin)) * (rows - 1));
+    const c = Math.round(((wp.lng - lonMin) / (lonMax - lonMin)) * (cols - 1));
+    const ri = Math.max(0, Math.min(rows - 1, r));
+    const ci = Math.max(0, Math.min(cols - 1, c));
+    const val = slope_grid[ri][ci];
+    if (Number.isFinite(val)) samples.push(val);
+  }
+
+  if (!samples.length) return { maxSlope: 0, avgSlope: 0 };
+  return {
+    maxSlope: Math.max(...samples),
+    avgSlope: samples.reduce((a, b) => a + b, 0) / samples.length,
+  };
+}
+
+// ── OSRM fetcher ─────────────────────────────────────────────────────────────
 
 async function fetchOSRMRoute(
   from: LatLng,
@@ -175,39 +338,136 @@ async function fetchOSRMRoute(
 
 // ─── Accessibility scoring ────────────────────────────────────────────────────
 
+interface AccessibilityContext {
+  nearbyStairs: number;
+  nearbyElevators: number;
+  nearbyRamps: number;
+  nearbyAccessibleStops: number;
+  nearbyParatransitStops: number;
+  badSurfaces: number;
+  maxSlope: number;
+  avgSlope: number;
+}
+
 function scoreRoute(
   distanceM: number,
   durationS: number,
   profile: Profile,
-  variant: "direct" | "scenic" | "quiet"
+  variant: "direct" | "scenic" | "quiet",
+  ctx: AccessibilityContext
 ): { score: number; tags: string[]; penalties: string[]; bonuses: string[] } {
   let score = 85;
   const tags: string[] = [];
   const penalties: string[] = [];
   const bonuses: string[] = [];
 
-  const actualSpeed = distanceM / Math.max(durationS, 1);
-  const isFlat = actualSpeed >= 1.0;
+  // ── Speed / flatness heuristic (kept from original) ───────────────────────
+  const expectedSpeed = 1.2;
+  const actualSpeed = distanceM / durationS;
+  const isFlat = actualSpeed >= expectedSpeed * 0.85;
 
-  if (isFlat) { score += 8; bonuses.push("Flat terrain"); tags.push("Flat"); }
-  else        { score -= 10; penalties.push("Hilly segment"); }
+  if (isFlat) { score += 5; bonuses.push("Flat terrain"); tags.push("Flat"); }
+  else { score -= 8; penalties.push("Hilly segment"); }
 
-  if (profile === "Wheelchair") {
-    score += 5; bonuses.push("Wheelchair-friendly"); tags.push("No stairs");
-    if (variant === "quiet") { score += 3; tags.push("Low crowd"); }
+  // ── Slope data (real elevation) ───────────────────────────────────────────
+  if (ctx.maxSlope > 0) {
+    if (ctx.maxSlope >= 12) {
+      score -= 15;
+      penalties.push(`Steep slope (${ctx.maxSlope.toFixed(0)}%)`);
+    } else if (ctx.maxSlope >= 8) {
+      score -= 8;
+      penalties.push(`Moderate slope (${ctx.maxSlope.toFixed(0)}%)`);
+    } else if (ctx.avgSlope < 3) {
+      score += 6;
+      bonuses.push("Gentle gradient");
+      tags.push("Low slope");
+    }
   }
-  if (profile === "Cane")       { score += 3; bonuses.push("Smooth surface"); tags.push("Smooth"); }
-  if (profile === "Low crowd")  { score += 5; bonuses.push("Low-traffic route"); tags.push("Quiet"); }
-  if (variant === "direct")     { tags.push("Shortest"); bonuses.push("Direct route"); }
-  if (variant === "scenic")     { score -= 5; tags.push("Longer path"); penalties.push("Extra distance"); }
-  if (variant === "quiet")      { score += 4; bonuses.push("Fewer crossings"); }
-  if (distanceM > 2000)         { score -= 5; penalties.push("Long distance"); }
-  if (distanceM < 500)          { score += 5; bonuses.push("Short trip"); }
+
+  // ── Stairs ─────────────────────────────────────────────────────────────────
+  if (ctx.nearbyStairs > 0) {
+    const stairPenalty = Math.min(20, ctx.nearbyStairs * 4);
+    score -= stairPenalty;
+    penalties.push(`${ctx.nearbyStairs} stair segment${ctx.nearbyStairs > 1 ? "s" : ""} nearby`);
+  } else {
+    score += 5;
+    bonuses.push("No stairs detected");
+    tags.push("No stairs");
+  }
+
+  // ── Elevators ──────────────────────────────────────────────────────────────
+  if (ctx.nearbyElevators > 0) {
+    score += Math.min(10, ctx.nearbyElevators * 3);
+    bonuses.push(`${ctx.nearbyElevators} elevator${ctx.nearbyElevators > 1 ? "s" : ""} available`);
+    tags.push("Elevator access");
+  }
+
+  // ── Ramps ──────────────────────────────────────────────────────────────────
+  if (ctx.nearbyRamps > 0) {
+    score += Math.min(8, ctx.nearbyRamps * 2);
+    bonuses.push("Ramp access");
+    tags.push("Ramps");
+  }
+
+  // ── Accessible transit stops ───────────────────────────────────────────────
+  if (ctx.nearbyAccessibleStops > 0) {
+    score += Math.min(8, ctx.nearbyAccessibleStops * 2);
+    bonuses.push("Accessible bus stops");
+    tags.push("Accessible transit");
+  }
+  if (ctx.nearbyParatransitStops > 0) {
+    score += 3;
+    tags.push("Paratransit nearby");
+  }
+
+  // ── Surface quality ────────────────────────────────────────────────────────
+  if (ctx.badSurfaces > 0) {
+    score -= Math.min(10, ctx.badSurfaces * 3);
+    penalties.push("Rough surface sections");
+  }
+
+  // ── Profile modifiers ──────────────────────────────────────────────────────
+  if (profile === "Wheelchair") {
+    // Stairs are extra bad; ramps & elevators are extra good
+    if (ctx.nearbyStairs > 0) score -= 8;
+    if (ctx.nearbyElevators > 0) score += 4;
+    if (ctx.nearbyRamps > 0) score += 4;
+    if (ctx.maxSlope >= 8) score -= 6;
+    tags.push("Wheelchair optimised");
+  }
+  if (profile === "Cane") {
+    if (ctx.badSurfaces > 0) score -= 4;
+    if (ctx.maxSlope >= 10) score -= 5;
+    bonuses.push("Smooth surface estimated");
+    tags.push("Smooth surface");
+  }
+  if (profile === "Low crowd") {
+    score += 5;
+    bonuses.push("Low-traffic route");
+    tags.push("Quiet streets");
+  }
+
+  // ── Variant adjustments ────────────────────────────────────────────────────
+  if (variant === "direct") {
+    tags.push("Shortest");
+    bonuses.push("Direct route");
+  } else if (variant === "scenic") {
+    score -= 3;
+    tags.push("Longer path");
+    penalties.push("Extra distance");
+  } else if (variant === "quiet") {
+    score += 4;
+    tags.push("Low crowd");
+    bonuses.push("Fewer crossings");
+  }
+
+  if (distanceM > 2000) { score -= 5; penalties.push("Long distance"); }
+  if (distanceM < 500) { score += 5; bonuses.push("Short trip"); }
 
   return {
     score: Math.max(0, Math.min(100, Math.round(score))),
     tags: [...new Set(tags)].slice(0, 4),
-    penalties: [...new Set(penalties)].slice(0, 2),
+    penalties: [...new Set(penalties)].slice(0, 3),
     bonuses: [...new Set(bonuses)].slice(0, 3),
   };
 }
@@ -241,7 +501,7 @@ export async function fetchNearbyTransitStops(
       lat: el.lat,
       lng: el.lon,
       type: el.tags?.railway === "station" || el.tags?.station === "subway" ? "metro"
-           : el.tags?.tram === "yes" ? "tram" : "bus",
+        : el.tags?.tram === "yes" ? "tram" : "bus",
       accessible: el.tags?.wheelchair === "yes",
       lines: el.tags?.route_ref ? el.tags.route_ref.split(";").map((s: string) => s.trim()) : [],
     }));
@@ -294,32 +554,100 @@ export async function getAccessibleRoutes(
 ): Promise<RouteResult[]> {
   const offset = 0.0008;
 
-  const [direct, alt1, alt2] = await Promise.all([
-    fetchOSRMRoute(from, to, lang),
-    fetchOSRMRoute({ lat: from.lat + offset, lng: from.lng }, { lat: to.lat - offset, lng: to.lng }, lang),
-    fetchOSRMRoute({ lat: from.lat, lng: from.lng + offset }, { lat: to.lat, lng: to.lng - offset }, lang),
+  // Fetch OSRM routes + accessibility data in parallel
+  const [direct, alt1, alt2, accData] = await Promise.all([
+    fetchOSRMRoute(from, to),
+    fetchOSRMRoute(
+      { lat: from.lat + offset, lng: from.lng },
+      { lat: to.lat - offset, lng: to.lng }
+    ),
+    fetchOSRMRoute(
+      { lat: from.lat, lng: from.lng + offset },
+      { lat: to.lat, lng: to.lng - offset }
+    ),
+    loadAccessibilityData(),
   ]);
 
   const results: RouteResult[] = [];
 
+  const buildContext = (waypoints: LatLng[]): AccessibilityContext => {
+    if (!accData) {
+      return {
+        nearbyStairs: 0, nearbyElevators: 0, nearbyRamps: 0,
+        nearbyAccessibleStops: 0, nearbyParatransitStops: 0,
+        badSurfaces: 0, maxSlope: 0, avgSlope: 0,
+      };
+    }
+
+    const d = accData.data;
+    const RADIUS = 80; // metres — features within 80m of any waypoint
+
+    const badSurfaceTags = new Set(["gravel", "unpaved", "dirt", "grass", "mud", "sand", "cobblestone"]);
+    const badSurfaces = d.surfaces.filter((f) => badSurfaceTags.has(f.surface ?? ""));
+
+    const { maxSlope, avgSlope } =
+      accData.slope_grid && accData.lats && accData.lons
+        ? sampleSlope(accData.slope_grid, accData.lats, accData.lons, waypoints)
+        : { maxSlope: 0, avgSlope: 0 };
+
+    return {
+      nearbyStairs: countNearby(d.stairs, waypoints, RADIUS),
+      nearbyElevators: countNearby(d.elevators, waypoints, RADIUS),
+      nearbyRamps: countNearby(d.ramps, waypoints, RADIUS),
+      nearbyAccessibleStops: countNearby(d.bus_stops_accessible, waypoints, RADIUS),
+      nearbyParatransitStops: countNearby(d.paratransit_stops, waypoints, RADIUS),
+      badSurfaces: countNearby(badSurfaces, waypoints, RADIUS),
+      maxSlope,
+      avgSlope,
+    };
+  };
+
   if (direct) {
-    const s = scoreRoute(direct.distanceM, direct.durationS, profile, "direct");
-    results.push({ name: lang === "fr" ? "Meilleur itinéraire" : "Best accessible", waypoints: direct.waypoints, distanceM: direct.distanceM, timeMin: Math.round(direct.durationS / 60), color: "#FC4C02", steps: direct.steps, ...s });
+    const ctx = buildContext(direct.waypoints);
+    const s = scoreRoute(direct.distanceM, direct.durationS, profile, "direct", ctx);
+    results.push({
+      name: "Best accessible",
+      waypoints: direct.waypoints,
+      distanceM: direct.distanceM,
+      timeMin: Math.round(direct.durationS / 60),
+      color: "#FC4C02",
+      steps: direct.steps,
+      ...s,
+    });
   }
   if (alt1 && alt1.waypoints.length > 2) {
-    const s = scoreRoute(alt1.distanceM, alt1.durationS, profile, "quiet");
-    results.push({ name: lang === "fr" ? "Moins fréquenté" : "Low crowd route", waypoints: alt1.waypoints, distanceM: alt1.distanceM, timeMin: Math.round(alt1.durationS / 60), color: "#2563EB", steps: alt1.steps, ...s });
+
+    const ctx = buildContext(alt1.waypoints);
+    const s = scoreRoute(alt1.distanceM, alt1.durationS, profile, "quiet", ctx);
+    results.push({
+      name: "Low crowd route",
+      waypoints: alt1.waypoints,
+      distanceM: alt1.distanceM,
+      timeMin: Math.round(alt1.durationS / 60),
+      color: "#2563EB",
+      steps: alt1.steps,
+      ...s,
+    });
   }
   if (alt2 && alt2.waypoints.length > 2) {
-    const s = scoreRoute(alt2.distanceM, alt2.durationS, profile, "scenic");
-    results.push({ name: lang === "fr" ? "Pente douce" : "Gentle incline", waypoints: alt2.waypoints, distanceM: alt2.distanceM, timeMin: Math.round(alt2.durationS / 60), color: "#7C3AED", steps: alt2.steps, ...s });
+    const ctx = buildContext(alt2.waypoints);
+    const s = scoreRoute(alt2.distanceM, alt2.durationS, profile, "scenic", ctx);
+    results.push({
+      name: "Gentle incline",
+      waypoints: alt2.waypoints,
+      distanceM: alt2.distanceM,
+      timeMin: Math.round(alt2.durationS / 60),
+      color: "#7C3AED",
+      steps: alt2.steps,
+      ...s,
+    });
   }
 
   results.sort((a, b) => b.score - a.score);
   return results;
 }
 
-// ─── Geocoding ────────────────────────────────────────────────────────────────
+// ── Geocode ───────────────────────────────────────────────────────────────────
 
 export async function geocode(query: string): Promise<GeoResult[]> {
   if (!query.trim()) return [];
@@ -338,7 +666,7 @@ export async function geocode(query: string): Promise<GeoResult[]> {
   } catch { return []; }
 }
 
-// ─── Agent loop ───────────────────────────────────────────────────────────────
+// ── Agent loop ────────────────────────────────────────────────────────────────
 
 export async function runAgentLoop(
   from: LatLng,
@@ -354,20 +682,44 @@ export async function runAgentLoop(
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const t = (en: string, fr: string) => lang === "fr" ? fr : en;
 
-  onLog({ type: "agent",  message: t(`[Agent] Task: find ${mode} route for ${profile}`, `[Agent] Tâche: itinéraire ${mode} pour ${profile}`) });
-  await delay(220);
-  onLog({ type: "tool",   message: `[Tool] → get_mobility_profile("${profile}")` });
-  await delay(180);
-  onLog({ type: "result", message: t("[Result] Profile loaded", "[Résultat] Profil chargé") });
-  await delay(220);
-  onLog({ type: "tool",   message: `[Tool] → geocode_coordinates(from, to)` });
-  await delay(180);
-  onLog({ type: "result", message: t("[Result] Coordinates resolved", "[Résultat] Coordonnées résolues") });
-  await delay(220);
-  onLog({ type: "tool",   message: `[Tool] → fetch_live_obstacles(area)` });
+  onLog({ type: "agent", message: `[Agent] Task: find accessible route for ${profile}` });
+  await delay(250);
+  onLog({ type: "tool", message: `[Tool] → get_mobility_profile("${profile}")` });
+  await delay(200);
+  onLog({ type: "result", message: `[Result] Profile loaded — applying cost weights` });
+  await delay(250);
+  onLog({ type: "tool", message: `[Tool] → geocode_coordinates(from, to)` });
+  await delay(200);
+  onLog({ type: "result", message: `[Result] Coordinates resolved` });
+  await delay(250);
+  onLog({ type: "tool", message: `[Tool] → fetch_live_obstacles(area)` });
   await delay(280);
-  onLog({ type: "think",  message: t("[Result] No major obstacles", "[Résultat] Aucun obstacle majeur") });
+  onLog({ type: "think", message: t("[Result] No major obstacles", "[Résultat] Aucun obstacle majeur") });
   await delay(220);
+  onLog({ type: "tool", message: `[Tool] → load_accessibility_data("data.json")` });
+  await delay(300);
+
+  const accData = await loadAccessibilityData();
+  if (accData) {
+    const d = accData.data;
+    const total =
+      d.stairs.length + d.elevators.length + d.ramps.length +
+      d.bus_stops_accessible.length + d.paratransit_stops.length;
+    onLog({ type: "result", message: `[Result] Loaded ${total} OSM accessibility features` });
+    if (accData.slope_grid) {
+      onLog({ type: "think", message: `[Think] Slope/elevation grid available — will penalise steep segments` });
+    }
+  } else {
+    onLog({ type: "think", message: `[Think] data.json not found — falling back to heuristic scoring` });
+  }
+
+  await delay(250);
+  onLog({ type: "tool", message: `[Tool] → fetch_live_obstacles(area)` });
+  await delay(300);
+  onLog({ type: "think", message: `[Result] No major obstacles reported` });
+  await delay(250);
+  onLog({ type: "tool", message: `[Tool] → run_pathfinding(algo="A*", variants=3)` });
+  await delay(400);
 
   if (mode === "transit") {
     onLog({ type: "tool", message: `[Tool] → fetch_accessible_transit_stops()` });
@@ -387,22 +739,20 @@ export async function runAgentLoop(
     await delay(200);
   }
 
-  onLog({ type: "tool",   message: `[Tool] → run_pathfinding(algo="A*", variants=3, lang="${lang}")` });
+  onLog({ type: "tool", message: `[Tool] → run_pathfinding(algo="A*", variants=3, lang="${lang}")` });
   await delay(380);
 
   const routes = await getAccessibleRoutes(from, to, profile, lang);
 
   onLog({ type: "result", message: t(`[Result] ${routes.length} routes via OSRM`, `[Résultat] ${routes.length} itinéraires via OSRM`) });
   await delay(180);
-  onLog({ type: "tool",   message: `[Tool] → score_accessibility(routes, profile)` });
+  onLog({ type: "tool", message: `[Tool] → score_accessibility(routes, profile)` });
   await delay(280);
   onLog({ type: "result", message: t(`[Result] Best score: ${routes[0]?.score ?? "—"}/100`, `[Résultat] Meilleur score: ${routes[0]?.score ?? "—"}/100`) });
   await delay(180);
-  onLog({ type: "tool",   message: `[Tool] → generate_turn_by_turn(steps, lang="${lang}")` });
+  onLog({ type: "tool", message: `[Tool] → generate_turn_by_turn(steps, lang="${lang}")` });
   await delay(180);
-  onLog({ type: "agent",  message: t(`[Agent] Done. ${routes.length} routes ready.`, `[Agent] Terminé. ${routes.length} itinéraires prêts.`) });
+  onLog({ type: "agent", message: t(`[Agent] Done. ${routes.length} routes ready.`, `[Agent] Terminé. ${routes.length} itinéraires prêts.`) });
 
   onRoutes(routes);
 }
-
-export type { TransportMode };
