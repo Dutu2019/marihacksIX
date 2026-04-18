@@ -459,7 +459,7 @@ export default function App() {
                     </div>
                   ))
                 : null}
-            </div>
+            </div>) : null}
           </div>
           <button onClick={() => setShowSettings(true)} style={{ ...glassCard, padding: "8px 12px", border: "none", cursor: "pointer", fontSize: 18, pointerEvents: "auto" }}>⚙️</button>
           {user ? (
