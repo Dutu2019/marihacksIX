@@ -101,8 +101,23 @@ export class VoiceAssistant {
   }
 
   public sendText(text: string) {
-    // placeholder, does nothing
-    return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    // Signal end of any in-progress audio input before sending text
+    this.ws.send(
+      JSON.stringify({
+        realtimeInput: { audioStreamEnd: true },
+      }),
+    );
+
+    this.ws.send(
+      JSON.stringify({
+        clientContent: {
+          turns: [{ role: "user", parts: [{ text }] }],
+          turnComplete: true,
+        },
+      }),
+    );
   }
 
   private workletAdded = false;
