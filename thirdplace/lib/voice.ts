@@ -16,7 +16,7 @@ const TOOLS = [{
       description: "Find a new accessible route because the current path is blocked.",
       parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] },
     },
-    // ... Add other tools here using snake_case for OpenAPI parts
+    
   ],
 }];
 

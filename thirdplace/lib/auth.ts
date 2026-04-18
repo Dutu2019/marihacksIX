@@ -1,7 +1,3 @@
-// lib/auth.ts
-// Simple client-side auth with localStorage.
-// In production, replace with a real backend / JWT.
-
 export type Profile = "Wheelchair" | "Cane" | "Walker" | "Low crowd";
 export type TransportMode = "walking" | "transit" | "car";
 
@@ -16,7 +12,7 @@ export interface UserPreferences {
 
 export interface User {
   username: string;
-  passwordHash: string; // simple hash for demo — use bcrypt in production
+  passwordHash: string;
   preferences: UserPreferences;
 }
 
@@ -32,7 +28,6 @@ export const DEFAULT_PREFS: UserPreferences = {
   largeText: false,
 };
 
-// Very simple hash — good enough for a hackathon demo
 function simpleHash(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
